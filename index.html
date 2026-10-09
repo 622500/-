@@ -78,6 +78,8 @@ button,input{font:inherit;color:inherit}
 .chip.mode-manual{color:var(--cyan);border-color:rgba(34,211,238,.4);background:rgba(34,211,238,.08)}
 .chip.mode-auto{color:var(--amber);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.08)}
 .chip.mode-estop{color:var(--red);border-color:rgba(248,113,113,.5);background:rgba(248,113,113,.1);animation:blink 1s steps(2,end) infinite}
+.chip.warn{color:var(--amber);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)}
+.chip.danger{color:#fff;border-color:rgba(248,113,113,.75);background:rgba(248,113,113,.28);animation:blink .8s steps(2,end) infinite}
 @keyframes blink{50%{opacity:.45}}
 
 /* ---------- language toggle (top-right corner) ---------- */
@@ -183,6 +185,7 @@ input.txt{
   background:#081120;border:1px solid var(--line);outline:none;font-size:12.5px;
 }
 input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+.stack{display:flex;flex-direction:column;gap:8px}
 
 /* =====================================================================
    BUTTONS
@@ -297,6 +300,13 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   padding:4px 9px;border-radius:8px;border:1px solid var(--line-soft);
 }
 .canvas-hint.estop{color:var(--red);border-color:rgba(248,113,113,.4)}
+.legend{
+  position:absolute;right:10px;bottom:10px;pointer-events:none;
+  display:flex;gap:10px;flex-wrap:wrap;
+  font-size:10.5px;color:var(--dim-2);background:rgba(6,12,20,.66);
+  padding:4px 9px;border-radius:8px;border:1px solid var(--line-soft);
+}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
 
 /* ---------- sensor rows ---------- */
 .kv{
@@ -355,18 +365,18 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
         </label>
 
         <label class="field">
-          <span class="field-top"><b data-i18n="p_turn">Turn rate</b><i id="vTurn">7.0 rad/s</i></span>
-          <input id="rTurn" type="range" min="2" max="16" step="0.5" value="7" />
+          <span class="field-top"><b data-i18n="p_turn">Turn rate</b><i id="vTurn">1.8 rad/s</i></span>
+          <input id="rTurn" type="range" min="0.4" max="3.2" step="0.1" value="1.8" />
         </label>
 
         <label class="field">
-          <span class="field-top"><b data-i18n="p_range">Radar range</b><i id="vRange">8.0 m</i></span>
-          <input id="rRange" type="range" min="3" max="16" step="0.5" value="8" />
+          <span class="field-top"><b data-i18n="p_range">LiDAR range</b><i id="vRange">8.0 m</i></span>
+          <input id="rRange" type="range" min="2" max="16" step="0.5" value="8" />
         </label>
 
         <label class="field">
-          <span class="field-top"><b data-i18n="p_fov">Radar FOV</b><i id="vFov">70&deg;</i></span>
-          <input id="rFov" type="range" min="20" max="160" step="5" value="70" />
+          <span class="field-top"><b data-i18n="p_fov">Camera FOV</b><i id="vFov">60&deg;</i></span>
+          <input id="rFov" type="range" min="20" max="120" step="5" value="60" />
         </label>
 
         <label class="field">
@@ -377,8 +387,8 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
         <div class="toggles">
           <label class="tg"><input id="cGrid"  type="checkbox" checked /><span data-i18n="t_grid">Grid</span></label>
           <label class="tg"><input id="cTrail" type="checkbox" checked /><span data-i18n="t_trail">Trail</span></label>
-          <label class="tg"><input id="cRadar" type="checkbox" checked /><span data-i18n="t_radar">Radar</span></label>
-          <label class="tg"><input id="cBlips" type="checkbox" checked /><span data-i18n="t_blips">Echoes</span></label>
+          <label class="tg"><input id="cLidar" type="checkbox" checked /><span data-i18n="t_lidar">LiDAR</span></label>
+          <label class="tg"><input id="cCam"   type="checkbox" checked /><span data-i18n="t_cam">Camera FOV</span></label>
         </div>
 
         <label class="field">
@@ -387,9 +397,14 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
                  data-i18n-placeholder="p_label_ph" placeholder="Robot label" />
         </label>
 
-        <button class="btn ghost" id="btnReset" type="button">
-          <span data-i18n="btn_reset">Restore defaults</span>
-        </button>
+        <div class="stack">
+          <button class="btn ghost" id="btnRegen" type="button">
+            <span data-i18n="btn_regen">New obstacle map</span>
+          </button>
+          <button class="btn ghost" id="btnReset" type="button">
+            <span data-i18n="btn_reset">Restore defaults</span>
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -404,7 +419,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 
       <!-- Joystick -->
       <div class="card" id="joyCard">
-        <div class="card-title" data-i18n="joy_title">Velocity joystick</div>
+        <div class="card-title" data-i18n="joy_title">Drive joystick</div>
         <div class="joy-wrap">
           <div class="joy-base" id="joyBase" role="application" aria-label="Joystick">
             <div class="joy-ring"></div>
@@ -414,7 +429,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
           <div class="joy-vector">
             <div class="vrow"><span data-i18n="ax_x">X axis</span><b id="axX">0.00</b><div class="vbar"><i id="barX"></i></div></div>
             <div class="vrow"><span data-i18n="ax_y">Y axis</span><b id="axY">0.00</b><div class="vbar"><i id="barY"></i></div></div>
-            <div class="joy-tip" data-i18n="joy_tip">Drag the stick to translate. Keyboard: W A S D / arrows. Any stick input cancels auto-navigation immediately.</div>
+            <div class="joy-tip" data-i18n="joy_tip">Non-holonomic drive: Y axis = forward / reverse, X axis = turn. The robot never slides sideways. Keyboard: W A S D / arrows.</div>
           </div>
         </div>
       </div>
@@ -466,10 +481,14 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
         <div class="kv"><span data-i18n="s_pose">Position (m)</span><b id="sPose">–</b></div>
         <div class="kv"><span data-i18n="s_yaw">Yaw</span><b id="sYaw">–</b></div>
         <div class="kv"><span data-i18n="s_speed">Linear speed</span><b id="sSpeed">–</b></div>
+        <div class="kv"><span data-i18n="s_ang">Angular speed</span><b id="sAng">–</b></div>
+        <div class="kv"><span data-i18n="s_clear">Nearest obstacle</span><b id="sClear">–</b></div>
+        <div class="kv"><span data-i18n="s_obs">Obstacles</span><b id="sObs">–</b></div>
+        <div class="kv"><span data-i18n="s_coll">Collision</span><b id="sColl">–</b></div>
         <div class="kv"><span data-i18n="s_target">Nav target</span><b id="sTarget">–</b></div>
         <div class="kv"><span data-i18n="s_dist">Distance to go</span><b id="sDist">–</b></div>
         <div class="kv"><span data-i18n="s_stick">Stick vector</span><b id="sStick">–</b></div>
-        <div class="kv"><span data-i18n="s_radar">Radar (range / FOV)</span><b id="sRadar">–</b></div>
+        <div class="kv"><span data-i18n="s_lidar">LiDAR / camera FOV</span><b id="sLidar">–</b></div>
         <div class="kv"><span data-i18n="s_trail">Trail points</span><b id="sTrail">–</b></div>
         <div class="kv"><span data-i18n="s_link">Link quality</span><b id="sLink" class="ok">–</b></div>
         <div class="linkbar"><i id="linkBar"></i></div>
@@ -482,7 +501,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       <header class="col-head">
         <div>
           <h1 data-i18n="global_title">Global view</h1>
-          <p class="sub" data-i18n="global_sub">Top-down map &amp; radar</p>
+          <p class="sub" data-i18n="global_sub">Top-down map &amp; sensors</p>
         </div>
         <div class="head-right">
           <button class="lang-btn" id="langBtn" type="button" data-i18n-title="lang_title" title="Switch language">EN</button>
@@ -495,8 +514,14 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
           <span class="chip mode-idle" id="hudMode">Idle</span>
           <span class="chip" id="hudSpeed">0.00 m/s</span>
           <span class="chip" id="hudPos">X 0.00 · Y 0.00</span>
+          <span class="chip" id="hudClear">Clearance 0.00 m</span>
         </div>
         <div class="canvas-hint" id="canvasHint" data-i18n="hint_click">Click the map to navigate</div>
+        <div class="legend">
+          <span><i style="background:#34d399"></i><span data-i18n="lg_lidar">LiDAR</span></span>
+          <span><i style="background:#a78bfa"></i><span data-i18n="lg_cam">Camera FOV</span></span>
+          <span><i style="background:#94a9c4"></i><span data-i18n="lg_obs">Obstacle</span></span>
+        </div>
       </div>
     </div>
   </section>
@@ -505,8 +530,18 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 <script>
 /* =====================================================================
    ROBOT TELEOP CONSOLE — single file, no dependencies
-   Architecture: state -> update(dt) -> render(). No differential drive,
-   no angular velocity. Motion is one translation vector; yaw follows it.
+   Batch 1: perception & environment upgrade.
+
+   Movement model (NON-HOLONOMIC):
+     - joystick Y  -> vx    (forward / reverse)
+     - joystick X  -> vyaw  (turn)
+     - x += cos(yaw) * vx * dt ;  y += sin(yaw) * vx * dt
+   The robot can never translate sideways. Yaw is an integrated state,
+   not something derived from a velocity vector.
+
+   World: fixed metric arena (metres), +y is DOWN on screen, origin at
+   the arena centre. The canvas scales the arena to fit, so obstacles
+   stay put when the window is resized.
    ===================================================================== */
 (function () {
   'use strict';
@@ -514,37 +549,55 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   /* ------------------------------------------------------------------
      1. CONSTANTS & STATE
      ------------------------------------------------------------------ */
-  var PX_PER_M    = 46;      // world -> screen scale
-  var BASE_SPEED  = 2.2;     // m/s at maxSpeed = 1.0
-  var NAV_LERP    = 0.05;    // lerp factor per 60fps frame
-  var ARRIVE_EPS  = 0.07;    // m
-  var YAW_MIN_SPD = 0.08;    // m/s, below this yaw is frozen
-  var MAX_TRAIL   = 260;
-  var MAX_LOGS    = 80;
+  var ARENA_HX   = 9.0;      // arena half width  (metres)
+  var ARENA_HY   = 5.75;     // arena half height (metres)
+  var BASE_SPEED = 2.2;      // m/s at maxSpeed = 1.0
+  var ROBOT_R    = 0.36;     // chassis radius (drawing + wall clamp)
+  var COLLIDE_R  = 0.5;      // collision warning distance (spec)
+  var OBST_MIN   = 5;        // obstacles per map
+  var OBST_MAX   = 8;
+  var OBST_GAP   = 1.5;      // minimum spacing between obstacles (spec)
+  var OBST_WALL  = 0.8;      // keep obstacles off the arena wall
+  var SPAWN_CLEAR= 1.6;      // keep the origin clear for the robot
+  var ARRIVE_EPS = 0.15;     // m
+  var NAV_TURN_GAIN = 3.0;   // steering P-gain
+  var NAV_ALIGN  = 1.15;     // rad, only drive when roughly facing the target
+  var NAV_BLOCK_MAX = 1.0;   // s blocked before auto-nav gives up
+  var MAX_TRAIL  = 260;
+  var MAX_LOGS   = 80;
+  var LIDAR_RAYS = 120;
+  var CAM_RANGE  = 6.0;      // m
+  var DEG        = Math.PI / 180;
+  var TAU        = Math.PI * 2;
 
   var DEFAULTS = {
-    maxSpeed: 1, turnRate: 7, range: 8, fov: 70, dead: 0.12,
-    grid: true, trail: true, radar: true, blips: true
+    maxSpeed: 1, turnRate: 1.8, range: 8, fov: 60, dead: 0.12,
+    grid: true, trail: true, lidar: true, cam: true
   };
 
   var state = {
-    // pose & velocity (world units are metres, +y is DOWN on screen)
-    x: 0, y: 0, yaw: -Math.PI / 2, vx: 0, vy: 0,
+    // pose: yaw is integrated from vyaw, never derived from velocity
+    x: 0, y: 0, yaw: -Math.PI / 2,
+    vx: 0, vyaw: 0,
     // tunables
     maxSpeed: DEFAULTS.maxSpeed, turnRate: DEFAULTS.turnRate, dead: DEFAULTS.dead,
     // modes
     estop: false, mode: 'idle',
-    // navigation
-    nav: { active: false, x: 0, y: 0 },
+    // navigation (steer-then-drive, no path planning)
+    nav: { active: false, x: 0, y: 0, blocked: 0 },
     // input
     joy: { active: false, pid: null, nx: 0, ny: 0 },
     keys: Object.create(null), keysDown: 0,
     vis: { x: 0, y: 0 },           // smoothed knob position (px)
-    // radar
-    radar: { sweep: 0, dir: 1, range: DEFAULTS.range, fov: DEFAULTS.fov, blips: [] },
+    // perception
+    lidar: { range: DEFAULTS.range },
+    cam: { fov: DEFAULTS.fov, range: CAM_RANGE },
+    obstacles: [],
+    // collision
+    collision: false, blocked: false, flash: 0, lastCollisionLog: 0, wasInCollision: false,
     // render flags
     showGrid: DEFAULTS.grid, showTrail: DEFAULTS.trail,
-    showRadar: DEFAULTS.radar, showBlips: DEFAULTS.blips,
+    showLidar: DEFAULTS.lidar, showCam: DEFAULTS.cam,
     // misc
     trail: [], trailTimer: 0, label: 'R-01',
     fps: 0, lastLockedLog: 0
@@ -564,16 +617,6 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
-  // deterministic PRNG so the echo field never flickers between reloads
-  function mulberry32(seed) {
-    return function () {
-      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
   /* ------------------------------------------------------------------
      3. I18N
      ------------------------------------------------------------------ */
@@ -584,17 +627,17 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       teleop_title: 'Teleoperation',
       teleop_sub: 'Manual joystick & quick actions',
       global_title: 'Global view',
-      global_sub: 'Top-down map & radar',
+      global_sub: 'Top-down map & sensors',
       drawer_params: 'Parameters',
       drawer_sensors: 'Sensors',
       p_title: 'Motion parameters',
-      p_speed: 'Max speed', p_turn: 'Turn rate', p_range: 'Radar range',
-      p_fov: 'Radar FOV', p_dead: 'Dead zone', p_label: 'Robot label',
+      p_speed: 'Max speed', p_turn: 'Turn rate', p_range: 'LiDAR range',
+      p_fov: 'Camera FOV', p_dead: 'Dead zone', p_label: 'Robot label',
       p_label_ph: 'Robot label',
-      t_grid: 'Grid', t_trail: 'Trail', t_radar: 'Radar', t_blips: 'Echoes',
-      btn_reset: 'Restore defaults',
-      joy_title: 'Velocity joystick',
-      joy_tip: 'Drag the stick to translate. Keyboard: W A S D / arrows. Any stick input cancels auto-navigation immediately.',
+      t_grid: 'Grid', t_trail: 'Trail', t_lidar: 'LiDAR', t_cam: 'Camera FOV',
+      btn_reset: 'Restore defaults', btn_regen: 'New obstacle map',
+      joy_title: 'Drive joystick',
+      joy_tip: 'Non-holonomic drive: Y axis = forward / reverse, X axis = turn. The robot never slides sideways. Keyboard: W A S D / arrows.',
       ax_x: 'X axis', ax_y: 'Y axis',
       actions_title: 'Quick actions',
       btn_estop: 'Emergency stop', btn_release: 'Release E-Stop',
@@ -602,15 +645,18 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       log_title: 'Event log', log_clear: 'Clear',
       s_title: 'Telemetry',
       s_mode: 'Mode', s_pose: 'Position (m)', s_yaw: 'Yaw', s_speed: 'Linear speed',
-      s_target: 'Nav target', s_dist: 'Distance to go', s_stick: 'Stick vector',
-      s_radar: 'Radar (range / FOV)', s_trail: 'Trail points', s_link: 'Link quality',
-      s_fps: 'Render FPS', s_uptime: 'Uptime',
+      s_ang: 'Angular speed', s_clear: 'Nearest obstacle', s_obs: 'Obstacles',
+      s_coll: 'Collision', s_target: 'Nav target', s_dist: 'Distance to go',
+      s_stick: 'Stick vector', s_lidar: 'LiDAR / camera FOV', s_trail: 'Trail points',
+      s_link: 'Link quality', s_fps: 'Render FPS', s_uptime: 'Uptime',
       mode_idle: 'Idle', mode_manual: 'Manual', mode_auto: 'Auto-nav', mode_estop: 'E-STOP',
       hint_click: 'Click the map to navigate',
       hint_locked: 'E-STOP engaged — release to move',
-      v_none: 'none',
+      hud_clear: 'Clearance',
+      lg_lidar: 'LiDAR', lg_cam: 'Camera FOV', lg_obs: 'Obstacle',
+      v_none: 'none', v_clear: 'Clear', v_warn: 'WARNING',
       log_boot: 'System ready · teleop channel online',
-      log_tip: 'Tip: drag the joystick or click the map to set a nav target.',
+      log_tip: 'Tip: Y axis drives, X axis turns. Click the map to auto-navigate.',
       log_lang: 'Language switched to {lang}',
       log_estop_on: 'E-STOP engaged · motion locked, joystick disabled',
       log_estop_off: 'E-STOP released · motion enabled',
@@ -624,7 +670,11 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       log_param: 'Parameter {name} = {value}',
       log_cleared: 'Event log cleared',
       log_bound: 'Click outside the arena · target clamped to the boundary',
-      log_locked: 'Input ignored · E-STOP is engaged'
+      log_locked: 'Input ignored · E-STOP is engaged',
+      log_map: 'Obstacle map generated · {n} obstacles, {gap} m minimum spacing',
+      log_collision: 'COLLISION WARNING · obstacle at {d} m — movement blocked',
+      log_collision_clear: 'Clearance restored · movement unblocked ({d} m)',
+      log_nav_blocked: 'Auto-nav blocked by obstacle · target cancelled'
     },
     zh: {
       app_title: '机器人遥操作控制台',
@@ -632,17 +682,17 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       teleop_title: '遥操作',
       teleop_sub: '手动摇杆与快捷动作',
       global_title: '全局视图',
-      global_sub: '俯视地图与雷达',
+      global_sub: '俯视地图与传感器',
       drawer_params: '参数',
       drawer_sensors: '传感器',
       p_title: '运动参数',
-      p_speed: '最大速度', p_turn: '转向速率', p_range: '雷达量程',
-      p_fov: '雷达视场角', p_dead: '死区', p_label: '机器人标签',
+      p_speed: '最大速度', p_turn: '转向速率', p_range: '激光雷达量程',
+      p_fov: '相机视场角', p_dead: '死区', p_label: '机器人标签',
       p_label_ph: '机器人标签',
-      t_grid: '网格', t_trail: '轨迹', t_radar: '雷达', t_blips: '回波',
-      btn_reset: '恢复默认',
-      joy_title: '速度摇杆',
-      joy_tip: '拖动摇杆即可平移。键盘：W A S D / 方向键。任何摇杆输入都会立刻取消自动导航。',
+      t_grid: '网格', t_trail: '轨迹', t_lidar: '激光雷达', t_cam: '相机视场',
+      btn_reset: '恢复默认', btn_regen: '重新生成障碍物',
+      joy_title: '驾驶摇杆',
+      joy_tip: '非完整约束驱动：Y 轴 = 前进 / 后退，X 轴 = 转向。机器人不会侧向平移。键盘：W A S D / 方向键。',
       ax_x: 'X 轴', ax_y: 'Y 轴',
       actions_title: '快捷动作',
       btn_estop: '紧急停止', btn_release: '解除急停',
@@ -650,15 +700,18 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       log_title: '事件日志', log_clear: '清空',
       s_title: '遥测数据',
       s_mode: '运行模式', s_pose: '位置 (米)', s_yaw: '航向角', s_speed: '线速度',
-      s_target: '导航目标', s_dist: '剩余距离', s_stick: '摇杆向量',
-      s_radar: '雷达 (量程 / 视场)', s_trail: '轨迹点数', s_link: '链路质量',
-      s_fps: '渲染帧率', s_uptime: '运行时长',
+      s_ang: '角速度', s_clear: '最近障碍物', s_obs: '障碍物数量',
+      s_coll: '碰撞状态', s_target: '导航目标', s_dist: '剩余距离',
+      s_stick: '摇杆向量', s_lidar: '激光雷达 / 相机视场', s_trail: '轨迹点数',
+      s_link: '链路质量', s_fps: '渲染帧率', s_uptime: '运行时长',
       mode_idle: '待机', mode_manual: '手动', mode_auto: '自动导航', mode_estop: '急停锁定',
       hint_click: '点击地图以设定目标',
       hint_locked: '急停已锁定 — 解除后方可移动',
-      v_none: '无',
+      hud_clear: '间距',
+      lg_lidar: '激光雷达', lg_cam: '相机视场', lg_obs: '障碍物',
+      v_none: '无', v_clear: '畅通', v_warn: '警告',
       log_boot: '系统就绪 · 遥操作通道已连接',
-      log_tip: '提示：拖动摇杆，或点击地图设定导航目标。',
+      log_tip: '提示：Y 轴控制前进，X 轴控制转向。点击地图可自动导航。',
       log_lang: '语言已切换为 {lang}',
       log_estop_on: '急停已触发 · 运动锁定，摇杆已禁用',
       log_estop_off: '急停已解除 · 运动已恢复',
@@ -672,7 +725,11 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       log_param: '参数 {name} = {value}',
       log_cleared: '事件日志已清空',
       log_bound: '点击位置超出场地 · 目标已修正到边界',
-      log_locked: '输入已被忽略 · 急停处于锁定状态'
+      log_locked: '输入已被忽略 · 急停处于锁定状态',
+      log_map: '障碍物地图已生成 · {n} 个障碍物，最小间距 {gap} 米',
+      log_collision: '碰撞警告 · 障碍物距离 {d} 米 — 已阻止移动',
+      log_collision_clear: '避障解除 · 移动已恢复（{d} 米）',
+      log_nav_blocked: '自动导航被障碍物阻断 · 目标已取消'
     }
   };
 
@@ -693,7 +750,6 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     return s;
   }
 
-  // param label lookup used by the "parameter changed" log line
   var PARAM_KEYS = {
     maxSpeed: 'p_speed', turnRate: 'p_turn', range: 'p_range',
     fov: 'p_fov', dead: 'p_dead'
@@ -734,6 +790,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     dom.hudMode    = $('#hudMode');
     dom.hudSpeed   = $('#hudSpeed');
     dom.hudPos     = $('#hudPos');
+    dom.hudClear   = $('#hudClear');
     dom.canvasHint = $('#canvasHint');
     dom.wrap       = $('#canvasWrap');
     dom.canvas     = $('#map');
@@ -748,6 +805,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     dom.btnHome  = $('#btnHome');
     dom.btnSlow  = $('#btnSlow');
     dom.btnReset = $('#btnReset');
+    dom.btnRegen = $('#btnRegen');
     dom.btnClearLog = $('#btnClearLog');
     dom.logList = $('#logList');
     dom.rSpeed = $('#rSpeed'); dom.vSpeed = $('#vSpeed');
@@ -756,20 +814,32 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     dom.rFov   = $('#rFov');   dom.vFov   = $('#vFov');
     dom.rDead  = $('#rDead');  dom.vDead  = $('#vDead');
     dom.cGrid = $('#cGrid'); dom.cTrail = $('#cTrail');
-    dom.cRadar = $('#cRadar'); dom.cBlips = $('#cBlips');
+    dom.cLidar = $('#cLidar'); dom.cCam = $('#cCam');
     dom.robotLabel = $('#robotLabel');
     dom.sMode = $('#sMode'); dom.sPose = $('#sPose'); dom.sYaw = $('#sYaw');
-    dom.sSpeed = $('#sSpeed'); dom.sTarget = $('#sTarget'); dom.sDist = $('#sDist');
-    dom.sStick = $('#sStick'); dom.sRadar = $('#sRadar'); dom.sTrail = $('#sTrail');
+    dom.sSpeed = $('#sSpeed'); dom.sAng = $('#sAng'); dom.sClear = $('#sClear');
+    dom.sObs = $('#sObs'); dom.sColl = $('#sColl');
+    dom.sTarget = $('#sTarget'); dom.sDist = $('#sDist');
+    dom.sStick = $('#sStick'); dom.sLidar = $('#sLidar'); dom.sTrail = $('#sTrail');
     dom.sLink = $('#sLink'); dom.linkBar = $('#linkBar');
     dom.sFps = $('#sFps'); dom.sUptime = $('#sUptime');
     dom.drawers = $$('.drawer');
   }
 
   /* ------------------------------------------------------------------
-     6. CANVAS
+     6. CANVAS + VIEW TRANSFORM (fixed arena -> fit-to-canvas)
      ------------------------------------------------------------------ */
   var ctx = null, cw = 1, ch = 1, dpr = 1;
+  var view = { cx: 0, cy: 0, s: 46 };   // world -> screen : sx = cx + wx * s
+
+  function updateView() {
+    var pad = 0.7;                       // metres of breathing room
+    var sx = cw / ((ARENA_HX + pad) * 2);
+    var sy = ch / ((ARENA_HY + pad) * 2);
+    view.s = Math.max(4, Math.min(sx, sy));
+    view.cx = cw / 2;
+    view.cy = ch / 2;
+  }
 
   function resizeCanvas() {
     if (!dom.canvas) { return; }
@@ -782,29 +852,107 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     }
     cw = w; ch = h; dpr = ndpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    updateView();
   }
 
-  function w2sX(wx) { return cw / 2 + wx * PX_PER_M; }
-  function w2sY(wy) { return ch / 2 + wy * PX_PER_M; }
-  function s2wX(sx) { return (sx - cw / 2) / PX_PER_M; }
-  function s2wY(sy) { return (sy - ch / 2) / PX_PER_M; }
+  function w2sX(wx) { return view.cx + wx * view.s; }
+  function w2sY(wy) { return view.cy + wy * view.s; }
+  function s2wX(sx) { return (sx - view.cx) / view.s; }
+  function s2wY(sy) { return (sy - view.cy) / view.s; }
 
-  function bounds() {
-    return {
-      hx: Math.max(0.8, cw / 2 / PX_PER_M - 0.5),
-      hy: Math.max(0.8, ch / 2 / PX_PER_M - 0.5)
-    };
-  }
   function clampToArena(p) {
-    var b = bounds();
-    var cx = clamp(p.x, -b.hx, b.hx), cy = clamp(p.y, -b.hy, b.hy);
+    var hx = ARENA_HX - ROBOT_R, hy = ARENA_HY - ROBOT_R;
+    var cx = clamp(p.x, -hx, hx), cy = clamp(p.y, -hy, hy);
     var moved = (cx !== p.x) || (cy !== p.y);
     p.x = cx; p.y = cy;
     return moved;
   }
 
   /* ------------------------------------------------------------------
-     7. INPUT — JOYSTICK
+     7. GEOMETRY — obstacles, distances, ray casting
+     ------------------------------------------------------------------ */
+  // distance from a point to an axis-aligned rectangle (0 when inside)
+  function rectDistance(r, px, py) {
+    var dx = Math.max(r.x0 - px, 0, px - r.x1);
+    var dy = Math.max(r.y0 - py, 0, py - r.y1);
+    return Math.hypot(dx, dy);
+  }
+
+  function nearestObstacle(px, py) {
+    var best = Infinity;
+    for (var i = 0; i < state.obstacles.length; i++) {
+      var d = rectDistance(state.obstacles[i], px, py);
+      if (d < best) { best = d; }
+    }
+    return best;
+  }
+
+  // gap test: rectangles are "too close" when neither axis separates them
+  // by at least minGap (this also covers plain overlap)
+  function gapTooSmall(a, b, minGap) {
+    var xg = Math.max(a.x0 - b.x1, b.x0 - a.x1);
+    var yg = Math.max(a.y0 - b.y1, b.y0 - a.y1);
+    return (xg < minGap) && (yg < minGap);
+  }
+
+  // ray vs AABB (slab method). Returns the entry distance, or Infinity.
+  function rayRect(ox, oy, dx, dy, r) {
+    var tmin = -Infinity, tmax = Infinity, t1, t2, tmp;
+    if (Math.abs(dx) < 1e-9) {
+      if (ox < r.x0 || ox > r.x1) { return Infinity; }
+    } else {
+      t1 = (r.x0 - ox) / dx; t2 = (r.x1 - ox) / dx;
+      if (t1 > t2) { tmp = t1; t1 = t2; t2 = tmp; }
+      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+    }
+    if (Math.abs(dy) < 1e-9) {
+      if (oy < r.y0 || oy > r.y1) { return Infinity; }
+    } else {
+      t1 = (r.y0 - oy) / dy; t2 = (r.y1 - oy) / dy;
+      if (t1 > t2) { tmp = t1; t1 = t2; t2 = tmp; }
+      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+    }
+    if (tmax < Math.max(tmin, 0)) { return Infinity; }
+    return tmin >= 0 ? tmin : (tmax >= 0 ? 0 : Infinity);
+  }
+
+  // distance from inside the arena to its wall along a direction
+  function rayArena(ox, oy, dx, dy) {
+    var best = Infinity;
+    if (dx > 1e-9) { best = Math.min(best, (ARENA_HX - ox) / dx); }
+    else if (dx < -1e-9) { best = Math.min(best, (-ARENA_HX - ox) / dx); }
+    if (dy > 1e-9) { best = Math.min(best, (ARENA_HY - oy) / dy); }
+    else if (dy < -1e-9) { best = Math.min(best, (-ARENA_HY - oy) / dy); }
+    return best;
+  }
+
+  // 5-8 static rectangles, >=1.5 m apart and clear of the robot's spawn
+  function generateObstacles() {
+    var wanted = OBST_MIN + Math.floor(Math.random() * (OBST_MAX - OBST_MIN + 1));
+    var out = [], attempts = 0, fails = 0;
+    while (out.length < wanted && attempts < 4000 && fails < 900) {
+      attempts++;
+      var w = 0.8 + Math.random() * 1.0;
+      var h = 0.8 + Math.random() * 1.0;
+      var x0 = -ARENA_HX + OBST_WALL + Math.random() * (ARENA_HX * 2 - OBST_WALL * 2 - w);
+      var y0 = -ARENA_HY + OBST_WALL + Math.random() * (ARENA_HY * 2 - OBST_WALL * 2 - h);
+      var r = { x0: x0, y0: y0, x1: x0 + w, y1: y0 + h };
+
+      var placed = true;
+      if (rectDistance(r, 0, 0) < SPAWN_CLEAR) { placed = false; }                    // spawn stays clear
+      if (placed && rectDistance(r, state.x, state.y) < ROBOT_R + 0.6) { placed = false; } // not on the robot
+      if (placed) {
+        for (var i = 0; i < out.length; i++) {
+          if (gapTooSmall(r, out[i], OBST_GAP)) { placed = false; break; }
+        }
+      }
+      if (placed) { out.push(r); fails = 0; } else { fails++; }
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------
+     8. INPUT — JOYSTICK
      ------------------------------------------------------------------ */
   var JOY_MAX_RATIO = 0.72;   // usable fraction of the base radius
 
@@ -864,7 +1012,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   /* ------------------------------------------------------------------
-     8. INPUT — KEYBOARD
+     9. INPUT — KEYBOARD
      ------------------------------------------------------------------ */
   var KEYMAP = {
     ArrowLeft: [-1, 0], KeyA: [-1, 0],
@@ -901,13 +1049,15 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   /* ------------------------------------------------------------------
-     9. NAVIGATION
+     10. NAVIGATION — steer toward the target, then drive (non-holonomic)
      ------------------------------------------------------------------ */
   function setTarget(wx, wy) {
     if (state.estop) { logLocked(); return; }
     var p = { x: wx, y: wy };
     if (clampToArena(p)) { log('log_bound', null, 'warn'); }
-    state.nav.x = p.x; state.nav.y = p.y; state.nav.active = true;
+    state.nav.x = p.x; state.nav.y = p.y;
+    state.nav.active = true;
+    state.nav.blocked = 0;
     log('log_target', { x: p.x.toFixed(2), y: p.y.toFixed(2) });
     updateHud(0, true);
   }
@@ -915,39 +1065,30 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   function cancelNav(logKey) {
     if (!state.nav.active) { return; }
     state.nav.active = false;
+    state.nav.blocked = 0;
     if (logKey) { log(logKey, null, 'warn'); }
     updateHud(0, true);
   }
 
-  function navStep(dt) {
+  // returns { vx, vyaw, arrived }
+  function navCommand() {
     var dx = state.nav.x - state.x;
     var dy = state.nav.y - state.y;
     var dist = Math.hypot(dx, dy);
+    if (dist < ARRIVE_EPS) { return { vx: 0, vyaw: 0, arrived: true }; }
 
-    if (dist < ARRIVE_EPS) {
-      state.x = state.nav.x; state.y = state.nav.y;
-      state.vx = 0; state.vy = 0;
-      state.nav.active = false;
-      log('log_reached', null, 'ok');
-      return;
+    var err = wrapPi(Math.atan2(dy, dx) - state.yaw);
+    var vyaw = clamp(err * NAV_TURN_GAIN, -state.turnRate, state.turnRate);
+    var vx = 0;
+    if (Math.abs(err) < NAV_ALIGN) {
+      var ease = Math.min(1, dist / 1.0);              // slow down near the target
+      vx = state.maxSpeed * BASE_SPEED * ease * (1 - 0.55 * Math.abs(err) / NAV_ALIGN);
     }
-
-    // frame-rate independent Lerp:  x += (target - x) * 0.05  @60fps
-    var k = 1 - Math.pow(1 - NAV_LERP, dt * 60);
-    var sx = dx * k, sy = dy * k;
-
-    // never exceed the configured max speed
-    var maxStep = state.maxSpeed * BASE_SPEED * dt;
-    var sl = Math.hypot(sx, sy);
-    if (sl > maxStep && sl > 0) { sx = sx / sl * maxStep; sy = sy / sl * maxStep; }
-
-    state.x += sx; state.y += sy;
-    state.vx = dt > 0 ? sx / dt : 0;
-    state.vy = dt > 0 ? sy / dt : 0;
+    return { vx: vx, vyaw: vyaw, arrived: false };
   }
 
   /* ------------------------------------------------------------------
-     10. INPUT RESOLUTION (single source of truth, joystick > auto-nav)
+     11. INPUT RESOLUTION (single source of truth, joystick > auto-nav)
      ------------------------------------------------------------------ */
   function readInput() {
     var nx = 0, ny = 0, src = 'none';
@@ -972,7 +1113,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   /* ------------------------------------------------------------------
-     11. SIMULATION STEP
+     12. SIMULATION STEP
      ------------------------------------------------------------------ */
   function update(dt) {
     var inp = readInput();
@@ -980,49 +1121,92 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 
     if (manual && state.nav.active) { cancelNav('log_cancel'); }
 
+    var wantVx = 0, wantVyaw = 0;
+
     if (state.estop) {
-      state.vx = 0; state.vy = 0;
       state.mode = 'estop';
     } else if (manual) {
-      state.vx = inp.nx * state.maxSpeed * BASE_SPEED;
-      state.vy = inp.ny * state.maxSpeed * BASE_SPEED;
+      // NON-HOLONOMIC MAPPING:
+      //   stick up    (ny = -1) -> forward (+vx)
+      //   stick right (nx = +1) -> clockwise (+yaw; screen +y points down)
+      wantVx   = -inp.ny * state.maxSpeed * BASE_SPEED;
+      wantVyaw =  inp.nx * state.turnRate;
       state.mode = 'manual';
     } else if (state.nav.active) {
-      navStep(dt);
+      var cmd = navCommand();
+      if (cmd.arrived) {
+        state.x = state.nav.x; state.y = state.nav.y;
+        state.nav.active = false;
+        state.nav.blocked = 0;
+        state.vx = 0; state.vyaw = 0;
+        state.mode = 'idle';
+        log('log_reached', null, 'ok');
+        updateHud(0, true);
+        return finishFrame(dt);
+      }
+      wantVx = cmd.vx; wantVyaw = cmd.vyaw;
       state.mode = 'auto';
     } else {
-      state.vx = 0; state.vy = 0;
       state.mode = 'idle';
     }
 
-    // Integrate the translation. In auto-nav the position was already advanced
-    // by navStep() this frame; every other mode integrates vx/vy (which is 0
-    // while idle or locked, so those branches are safe no-ops).
-    if (!(state.mode === 'auto' && !manual)) {
-      state.x += state.vx * dt;
-      state.y += state.vy * dt;
+    // --- rotation is integrated directly (always allowed) -------------
+    // Blocking rotation next to an obstacle is what makes a robot jam
+    // forever, so only translation is gated by the collision check.
+    state.yaw = wrapPi(state.yaw + wantVyaw * dt);
+    state.vyaw = wantVyaw;
+
+    // --- translation is strictly along the heading --------------------
+    var stepX = Math.cos(state.yaw) * wantVx * dt;
+    var stepY = Math.sin(state.yaw) * wantVx * dt;
+
+    var curDist = nearestObstacle(state.x, state.y);
+    var p = { x: state.x + stepX, y: state.y + stepY };
+    clampToArena(p);
+    var newDist = nearestObstacle(p.x, p.y);
+
+    state.blocked = false;
+    var moving = Math.abs(wantVx) > 0.001;
+
+    // Block a move that would push into an obstacle. A move that IMPROVES
+    // clearance is always allowed, so the robot can never get permanently
+    // trapped if it is already inside the warning ring.
+    if (moving && newDist < COLLIDE_R && newDist <= curDist + 1e-4) {
+      state.blocked = true;
+      state.vx = 0;
+      state.flash = 1;
+      collisionLog(curDist);
+      if (state.mode === 'auto') {
+        state.nav.blocked += dt;
+        if (state.nav.blocked > NAV_BLOCK_MAX) { cancelNav('log_nav_blocked'); }
+      }
+    } else {
+      state.x = p.x; state.y = p.y;
+      state.vx = wantVx;
     }
 
-    // hard arena clamp (never leaves the map)
-    var p = { x: state.x, y: state.y };
-    if (clampToArena(p)) { state.x = p.x; state.y = p.y; }
+    // The robot is "in collision" when it is inside the ring OR when a move
+    // was just denied by it. Both mean the same thing to an operator, and
+    // keying every display off one predicate keeps HUD and telemetry honest:
+    // the step size means a blocked robot parks just outside 0.5 m, so a bare
+    // "distance < 0.5" test would report "clear" while it is pinned.
+    var nowNear = nearestObstacle(state.x, state.y);
+    state.collision = state.blocked || (nowNear < COLLIDE_R);
 
-    // yaw strictly follows the movement vector
-    var sp = Math.hypot(state.vx, state.vy);
-    if (sp > YAW_MIN_SPD) {
-      var target = Math.atan2(state.vy, state.vx);
-      var diff = wrapPi(target - state.yaw);
-      var maxTurn = state.turnRate * dt;
-      state.yaw = wrapPi(state.yaw + clamp(diff, -maxTurn, maxTurn));
+    // leaving the warning ring is worth reporting once
+    if (state.wasInCollision && !state.collision) {
+      log('log_collision_clear', { d: nowNear.toFixed(2) }, 'ok');
     }
+    state.wasInCollision = state.collision;
 
-    // radar sweep ping-pongs INSIDE the sector (never independent of yaw)
-    var sweepSpeed = 0.85;
-    state.radar.sweep += state.radar.dir * sweepSpeed * dt;
-    if (state.radar.sweep >= 1) { state.radar.sweep = 1; state.radar.dir = -1; }
-    if (state.radar.sweep <= 0) { state.radar.sweep = 0; state.radar.dir = 1; }
+    if (state.collision || state.blocked) { state.flash = Math.max(state.flash, 0.75); }
+    state.flash = Math.max(0, state.flash - dt * 2.0);
 
-    // trail sampling
+    return finishFrame(dt);
+  }
+
+  // shared tail: trail sampling + knob visual (also used by the early return)
+  function finishFrame(dt) {
     state.trailTimer += dt;
     if (state.trailTimer >= 0.08) {
       state.trailTimer = 0;
@@ -1033,15 +1217,14 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       }
     }
 
-    // smoothed knob visual (also mirrors keyboard input)
+    var inp2 = readInput();
     var vtx = 0, vty = 0;
     if (!state.estop) {
       if (state.joy.active) { vtx = state.joy.nx; vty = state.joy.ny; }
-      else if (state.keysDown > 0) { vtx = inp.nx; vty = inp.ny; }
+      else if (state.keysDown > 0) { vtx = inp2.nx; vty = inp2.ny; }
     }
-    var g = null;
     if (vtx !== 0 || vty !== 0 || state.vis.x !== 0 || state.vis.y !== 0) {
-      g = joyGeometry();
+      var g = joyGeometry();
       var maxPx = g.R * JOY_MAX_RATIO;
       var tx = state.joy.active ? state.vis.x : vtx * maxPx;
       var ty = state.joy.active ? state.vis.y : vty * maxPx;
@@ -1057,8 +1240,15 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     }
   }
 
+  function collisionLog(dist) {
+    var now = Date.now();
+    if (now - state.lastCollisionLog < 1500) { return; }
+    state.lastCollisionLog = now;
+    log('log_collision', { d: dist.toFixed(2) }, 'danger');
+  }
+
   /* ------------------------------------------------------------------
-     12. RENDER
+     13. RENDER
      ------------------------------------------------------------------ */
   function modeColor(mode) {
     if (mode === 'estop') { return '#f87171'; }
@@ -1067,47 +1257,82 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     return '#5b7093';
   }
 
+  function gridStep() {
+    if (view.s < 16) { return 5; }
+    if (view.s < 30) { return 2; }
+    return 1;
+  }
+
   function drawGrid() {
-    var x0 = Math.floor(s2wX(0)), x1 = Math.ceil(s2wX(cw));
-    var y0 = Math.floor(s2wY(0)), y1 = Math.ceil(s2wY(ch));
-    if ((x1 - x0) > 400 || (y1 - y0) > 400) { return; }
+    var step = gridStep();
+    var x0 = Math.floor(s2wX(0) / step) * step, x1 = Math.ceil(s2wX(cw) / step) * step;
+    var y0 = Math.floor(s2wY(0) / step) * step, y1 = Math.ceil(s2wY(ch) / step) * step;
+    if ((x1 - x0) / step > 400 || (y1 - y0) / step > 400) { return; }
 
     ctx.lineWidth = 1;
-    for (var gx = x0; gx <= x1; gx++) {
-      var major = (gx % 5 === 0);
-      var sx = Math.round(w2sX(gx)) + 0.5;
-      ctx.strokeStyle = major ? 'rgba(34,211,238,.14)' : 'rgba(127,150,184,.07)';
+    var gx, gy, major, sx, sy;
+    for (gx = x0; gx <= x1; gx += step) {
+      major = (Math.abs(gx) < 1e-6) || (gx % (step * 5) === 0);
+      sx = Math.round(w2sX(gx)) + 0.5;
+      ctx.strokeStyle = major ? 'rgba(34,211,238,.16)' : 'rgba(127,150,184,.07)';
       ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, ch); ctx.stroke();
-      if (major) {
+      if (major && view.s > 12) {
         ctx.fillStyle = 'rgba(127,150,184,.5)';
         ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
         ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        ctx.fillText(gx + 'm', sx + 3, ch / 2 + 3);
+        ctx.fillText(gx + 'm', sx + 3, view.cy + 3);
       }
     }
-    for (var gy = y0; gy <= y1; gy++) {
-      var majorY = (gy % 5 === 0);
-      var sy = Math.round(w2sY(gy)) + 0.5;
-      ctx.strokeStyle = majorY ? 'rgba(34,211,238,.14)' : 'rgba(127,150,184,.07)';
+    for (gy = y0; gy <= y1; gy += step) {
+      major = (Math.abs(gy) < 1e-6) || (gy % (step * 5) === 0);
+      sy = Math.round(w2sY(gy)) + 0.5;
+      ctx.strokeStyle = major ? 'rgba(34,211,238,.16)' : 'rgba(127,150,184,.07)';
       ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(cw, sy); ctx.stroke();
-      if (majorY) {
+      if (major && view.s > 12) {
         ctx.fillStyle = 'rgba(127,150,184,.5)';
         ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
         ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-        ctx.fillText(gy + 'm', cw / 2 + 3, sy - 3);
+        ctx.fillText(gy + 'm', view.cx + 3, sy - 3);
       }
     }
   }
 
   function drawArena() {
-    var b = bounds();
     ctx.save();
     ctx.setLineDash([7, 7]);
     ctx.lineDashOffset = 0;
-    ctx.strokeStyle = 'rgba(127,150,184,.34)';
+    ctx.strokeStyle = 'rgba(127,150,184,.4)';
     ctx.lineWidth = 1.2;
-    ctx.strokeRect(w2sX(-b.hx), w2sY(-b.hy), (b.hx * 2) * PX_PER_M, (b.hy * 2) * PX_PER_M);
+    ctx.strokeRect(w2sX(-ARENA_HX), w2sY(-ARENA_HY), ARENA_HX * 2 * view.s, ARENA_HY * 2 * view.s);
     ctx.restore();
+  }
+
+  function drawObstacles() {
+    for (var i = 0; i < state.obstacles.length; i++) {
+      var o = state.obstacles[i];
+      var d = rectDistance(o, state.x, state.y);
+      var warn = d < COLLIDE_R;
+      var x = w2sX(o.x0), y = w2sY(o.y0);
+      var w = (o.x1 - o.x0) * view.s, h = (o.y1 - o.y0) * view.s;
+
+      ctx.save();
+      ctx.fillStyle = warn ? 'rgba(248,113,113,.26)' : 'rgba(148,169,196,.15)';
+      ctx.strokeStyle = warn ? 'rgba(248,113,113,.9)' : 'rgba(148,169,196,.6)';
+      ctx.lineWidth = warn ? 2 : 1.2;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+
+      // hazard hatch so obstacles read as solid, not as the ground grid
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+      ctx.strokeStyle = warn ? 'rgba(248,113,113,.35)' : 'rgba(148,169,196,.22)';
+      ctx.lineWidth = 1;
+      for (var hx = -h; hx < w; hx += 9) {
+        ctx.beginPath(); ctx.moveTo(x + hx, y + h); ctx.lineTo(x + hx + h, y); ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   function drawTrail() {
@@ -1126,80 +1351,93 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     ctx.restore();
   }
 
-  function drawRadar(cx, cy) {
-    var r = state.radar.range * PX_PER_M;
-    var half = (state.radar.fov * Math.PI / 180) / 2;
+  // LiDAR: 360-degree ray cast -> faint range circle + hit point cloud
+  function drawLidar(cx, cy) {
+    var range = state.lidar.range;
+    var n = LIDAR_RAYS;
+    var i, a, dxs, dys, t, j, rt, hit;
+
+    ctx.save();
+    ctx.setLineDash([3, 7]);
+    ctx.strokeStyle = 'rgba(52,211,153,.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, range * view.s, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+
+    // cast every ray once, keep the results
+    var pts = [];
+    for (i = 0; i < n; i++) {
+      a = (i / n) * TAU;
+      dxs = Math.cos(a); dys = Math.sin(a);
+      t = rayArena(state.x, state.y, dxs, dys);
+      hit = false;
+      for (j = 0; j < state.obstacles.length; j++) {
+        rt = rayRect(state.x, state.y, dxs, dys, state.obstacles[j]);
+        if (rt < t) { t = rt; hit = true; }
+      }
+      if (t > range) { t = range; hit = false; }
+      pts.push({ x: state.x + dxs * t, y: state.y + dys * t, hit: hit });
+    }
+
+    // outline + soft fill of the scanned area
+    ctx.save();
+    ctx.beginPath();
+    for (i = 0; i < pts.length; i++) {
+      var px = w2sX(pts[i].x), py = w2sY(pts[i].y);
+      if (i === 0) { ctx.moveTo(px, py); } else { ctx.lineTo(px, py); }
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(52,211,153,.045)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(52,211,153,.22)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // the point cloud itself: bright on geometry, dim on the arena wall
+    ctx.save();
+    for (i = 0; i < pts.length; i++) {
+      var q = pts[i];
+      ctx.beginPath();
+      ctx.arc(w2sX(q.x), w2sY(q.y), q.hit ? 1.9 : 1.1, 0, TAU);
+      ctx.fillStyle = q.hit ? 'rgba(134,239,172,.9)' : 'rgba(52,211,153,.2)';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Camera: 60-degree semi-transparent sector locked to yaw
+  function drawCameraFOV(cx, cy) {
+    var half = (state.cam.fov * DEG) / 2;
+    var r = state.cam.range * view.s;
     var a0 = state.yaw - half, a1 = state.yaw + half;
 
     ctx.save();
     ctx.translate(cx, cy);
-
-    // sector — strictly centred on yaw
     var g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-    g.addColorStop(0, 'rgba(34,211,238,.30)');
-    g.addColorStop(0.65, 'rgba(34,211,238,.12)');
-    g.addColorStop(1, 'rgba(34,211,238,0)');
+    g.addColorStop(0, 'rgba(167,139,250,.34)');
+    g.addColorStop(0.7, 'rgba(167,139,250,.13)');
+    g.addColorStop(1, 'rgba(167,139,250,0)');
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, r, a0, a1);
     ctx.closePath();
     ctx.fillStyle = g;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(34,211,238,.5)';
+    ctx.strokeStyle = 'rgba(167,139,250,.45)';
     ctx.lineWidth = 1.2;
     ctx.stroke();
 
-    // range rings inside the sector
-    ctx.strokeStyle = 'rgba(34,211,238,.13)';
-    ctx.lineWidth = 1;
-    for (var i = 1; i <= 4; i++) {
-      ctx.beginPath();
-      ctx.arc(0, 0, r * i / 4, a0, a1);
-      ctx.stroke();
-    }
-
-    // sweep line + leading wedge, both confined to the sector
-    var sweep = a0 + state.radar.sweep * (a1 - a0);
-    var wg = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-    wg.addColorStop(0, 'rgba(150,250,255,.42)');
-    wg.addColorStop(1, 'rgba(150,250,255,0)');
+    // optical axis right on the robot's nose
     ctx.beginPath();
+    ctx.setLineDash([5, 6]);
     ctx.moveTo(0, 0);
-    ctx.arc(0, 0, r, sweep - 0.16, sweep);
-    ctx.closePath();
-    ctx.fillStyle = wg;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(Math.cos(sweep) * r, Math.sin(sweep) * r);
-    ctx.strokeStyle = 'rgba(190,255,255,.85)';
-    ctx.lineWidth = 1.4;
+    ctx.lineTo(Math.cos(state.yaw) * r, Math.sin(state.yaw) * r);
+    ctx.strokeStyle = 'rgba(196,181,253,.55)';
+    ctx.lineWidth = 1.2;
     ctx.stroke();
-
-    // echoes (static world points, lit when the sweep passes)
-    if (state.showBlips) {
-      for (var b = 0; b < state.radar.blips.length; b++) {
-        var bp = state.radar.blips[b];
-        var dx = bp.x - state.x, dy = bp.y - state.y;
-        var d = Math.hypot(dx, dy);
-        if (d > state.radar.range) { continue; }
-        var ang = Math.atan2(dy, dx);
-        if (Math.abs(wrapPi(ang - state.yaw)) > half) { continue; }
-        var dAng = Math.abs(wrapPi(ang - sweep));
-        var lit = Math.max(0, 1 - dAng / 0.45);
-        var alpha = 0.10 + lit * 0.85;
-        var rad = 1.6 + lit * 2.4;
-        var px = dx * PX_PER_M, py = dy * PX_PER_M;
-        ctx.beginPath();
-        ctx.arc(px, py, rad + 4, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(52,211,153,' + (alpha * 0.16).toFixed(3) + ')';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(px, py, rad, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(134,239,172,' + alpha.toFixed(3) + ')';
-        ctx.fill();
-      }
-    }
     ctx.restore();
   }
 
@@ -1219,7 +1457,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     ctx.setLineDash([5, 5]);
     ctx.strokeStyle = 'rgba(251,191,36,.9)';
     ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 12, 0, TAU); ctx.stroke();
     ctx.restore();
 
     ctx.save();
@@ -1234,23 +1472,56 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   function drawRobot(cx, cy, now) {
-    var R = 0.36 * PX_PER_M;
+    var R = Math.max(7, ROBOT_R * view.s);
     var col = modeColor(state.mode);
 
-    // velocity arrow (drawn in world space, before rotation)
-    var sp = Math.hypot(state.vx, state.vy);
+    // red flash on contact: solid while inside the ring, decaying pulse after a block
+    var flash = state.collision
+      ? Math.max(state.flash, 0.55 + 0.45 * Math.sin(now * 14))
+      : state.flash;
+    flash = clamp(flash, 0, 1);
+    var danger = flash > 0.04;
+
+    // safety envelope (the 0.5 m from the spec)
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    ctx.arc(0, 0, COLLIDE_R * view.s, 0, TAU);
+    ctx.setLineDash([4, 5]);
+    ctx.strokeStyle = danger ? 'rgba(248,113,113,.55)' : 'rgba(248,113,113,.18)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // velocity vector along the heading only (non-holonomic)
+    var sp = Math.abs(state.vx);
     if (sp > 0.05) {
+      var dir = state.vx >= 0 ? 1 : -1;
       var len = Math.min(2.2, sp / BASE_SPEED) * 62 + 12;
-      var ex = cx + Math.cos(state.yaw) * len;
-      var ey = cy + Math.sin(state.yaw) * len;
+      var ex = cx + Math.cos(state.yaw) * len * dir;
+      var ey = cy + Math.sin(state.yaw) * len * dir;
       ctx.save();
-      ctx.strokeStyle = 'rgba(52,211,153,.8)';
+      ctx.strokeStyle = dir > 0 ? 'rgba(52,211,153,.8)' : 'rgba(251,191,36,.8)';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
-      ctx.translate(ex, ey); ctx.rotate(state.yaw);
+      ctx.translate(ex, ey); ctx.rotate(state.yaw + (dir < 0 ? Math.PI : 0));
       ctx.beginPath();
       ctx.moveTo(0, 0); ctx.lineTo(-8, -4.5); ctx.lineTo(-8, 4.5); ctx.closePath();
-      ctx.fillStyle = 'rgba(52,211,153,.9)'; ctx.fill();
+      ctx.fillStyle = dir > 0 ? 'rgba(52,211,153,.9)' : 'rgba(251,191,36,.9)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // turn arc: shows which way the robot is rotating
+    if (Math.abs(state.vyaw) > 0.05) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.beginPath();
+      ctx.arc(0, 0, R * 1.9, -0.7, 0.7);
+      ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(34,211,238,.75)';
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -1260,24 +1531,29 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     if (state.estop) {
       ctx.strokeStyle = 'rgba(248,113,113,' + (0.5 + 0.35 * Math.sin(now * 7)).toFixed(3) + ')';
       ctx.lineWidth = 2.2;
-      ctx.beginPath(); ctx.arc(0, 0, R * 2.05, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, R * 2.05, 0, TAU); ctx.stroke();
     } else if (state.nav.active) {
       ctx.setLineDash([4, 5]);
       ctx.lineDashOffset = -now * 20;
       ctx.strokeStyle = 'rgba(251,191,36,.75)';
       ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.arc(0, 0, R * 1.75, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, R * 1.75, 0, TAU); ctx.stroke();
     }
     ctx.restore();
 
-    // chassis + front arrow (rotated by yaw => front always points along yaw)
+    // chassis: triangle, front = +yaw
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(state.yaw);
 
     var body = ctx.createLinearGradient(-R, -R, R, R);
-    body.addColorStop(0, '#0e5f77');
-    body.addColorStop(1, '#1fb6d4');
+    if (danger) {
+      body.addColorStop(0, '#7f1d1d');
+      body.addColorStop(1, '#ef4444');
+    } else {
+      body.addColorStop(0, '#0e5f77');
+      body.addColorStop(1, '#1fb6d4');
+    }
 
     ctx.beginPath();
     ctx.moveTo(R * 1.5, 0);
@@ -1288,7 +1564,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     ctx.fillStyle = body;
     ctx.fill();
     ctx.lineWidth = 1.8;
-    ctx.strokeStyle = state.estop ? '#f87171' : col;
+    ctx.strokeStyle = danger ? '#fecaca' : (state.estop ? '#f87171' : col);
     ctx.stroke();
 
     // white front marker
@@ -1301,7 +1577,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 
     // sensor bump
     ctx.beginPath();
-    ctx.arc(R * 0.12, 0, R * 0.26, 0, Math.PI * 2);
+    ctx.arc(R * 0.12, 0, R * 0.26, 0, TAU);
     ctx.fillStyle = 'rgba(4,16,24,.85)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(190,255,255,.7)';
@@ -1314,8 +1590,8 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     ctx.font = '600 11px ui-monospace,Menlo,Consolas,monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(219,234,254,.92)';
-    ctx.fillText(state.label, cx, cy - R * 1.95);
+    ctx.fillStyle = danger ? 'rgba(254,202,202,.95)' : 'rgba(219,234,254,.92)';
+    ctx.fillText(state.label, cx, cy - R * 1.95 - 6);
     ctx.restore();
   }
 
@@ -1333,14 +1609,16 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 
     if (state.showGrid) { drawGrid(); }
     drawArena();
+    drawObstacles();
     if (state.showTrail) { drawTrail(); }
-    if (state.showRadar) { drawRadar(cx, cy); }
+    if (state.showLidar) { drawLidar(cx, cy); }
+    if (state.showCam) { drawCameraFOV(cx, cy); }
     if (state.nav.active) { drawTarget(cx, cy, now); }
     drawRobot(cx, cy, now);
   }
 
   /* ------------------------------------------------------------------
-     13. HUD (DOM) — throttled for layout safety
+     14. HUD (DOM) — throttled for layout safety
      ------------------------------------------------------------------ */
   var hudTimer = 0, fpsAcc = 0, fpsFrames = 0, fpsTimer = 0;
 
@@ -1357,9 +1635,15 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     if (dom.modeChip) { dom.modeChip.textContent = modeText; dom.modeChip.className = cls; }
     if (dom.hudMode) { dom.hudMode.textContent = modeText; dom.hudMode.className = cls; }
 
-    var sp = Math.hypot(state.vx, state.vy);
+    var sp = Math.abs(state.vx);
     if (dom.hudSpeed) { dom.hudSpeed.textContent = sp.toFixed(2) + ' m/s'; }
     if (dom.hudPos) { dom.hudPos.textContent = 'X ' + state.x.toFixed(2) + ' · Y ' + state.y.toFixed(2); }
+
+    var near = nearestObstacle(state.x, state.y);
+    if (dom.hudClear) {
+      dom.hudClear.textContent = t('hud_clear') + ' ' + (isFinite(near) ? near.toFixed(2) + ' m' : '—');
+      dom.hudClear.className = 'chip' + (state.collision ? ' danger' : (near < 1.0 ? ' warn' : ''));
+    }
 
     if (dom.axX) { dom.axX.textContent = state.joy.nx.toFixed(2); }
     if (dom.axY) { dom.axY.textContent = state.joy.ny.toFixed(2); }
@@ -1387,6 +1671,17 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     if (dom.sPose) { dom.sPose.textContent = state.x.toFixed(2) + ', ' + state.y.toFixed(2); }
     if (dom.sYaw) { dom.sYaw.textContent = (state.yaw * 180 / Math.PI).toFixed(1) + '°'; }
     if (dom.sSpeed) { dom.sSpeed.textContent = sp.toFixed(2) + ' m/s'; }
+    if (dom.sAng) { dom.sAng.textContent = state.vyaw.toFixed(2) + ' rad/s'; }
+    if (dom.sClear) {
+      dom.sClear.textContent = isFinite(near) ? near.toFixed(2) + ' m' : '—';
+      dom.sClear.className = state.collision ? 'bad' : (near < 1.0 ? 'warn' : 'ok');
+    }
+    if (dom.sObs) { dom.sObs.textContent = String(state.obstacles.length); }
+    if (dom.sColl) {
+      var bad = state.collision || state.blocked;
+      dom.sColl.textContent = bad ? t('v_warn') : t('v_clear');
+      dom.sColl.className = bad ? 'bad' : 'ok';
+    }
     if (dom.sTarget) {
       dom.sTarget.textContent = state.nav.active
         ? state.nav.x.toFixed(2) + ', ' + state.nav.y.toFixed(2)
@@ -1403,7 +1698,9 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
         ? state.joy.nx.toFixed(2) + ', ' + state.joy.ny.toFixed(2)
         : '0.00, 0.00';
     }
-    if (dom.sRadar) { dom.sRadar.textContent = state.radar.range.toFixed(1) + ' m / ' + Math.round(state.radar.fov) + '°'; }
+    if (dom.sLidar) {
+      dom.sLidar.textContent = state.lidar.range.toFixed(1) + ' m / ' + Math.round(state.cam.fov) + '°';
+    }
     if (dom.sTrail) { dom.sTrail.textContent = String(state.trail.length); }
 
     var link = Math.round(72 + 24 * Math.sin(performance.now() / 900));
@@ -1424,14 +1721,13 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   /* ------------------------------------------------------------------
-     14. QUICK ACTIONS
+     15. QUICK ACTIONS
      ------------------------------------------------------------------ */
-  function estopActive() { return state.estop; }
-
   function setEstop(on) {
     state.estop = on;
-    state.vx = 0; state.vy = 0;
+    state.vx = 0; state.vyaw = 0;
     state.nav.active = false;
+    state.nav.blocked = 0;
     joyRelease();
     state.keysDown = 0; state.keys = Object.create(null);
     state.vis.x = 0; state.vis.y = 0;
@@ -1459,8 +1755,9 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   function doHold() {
-    state.vx = 0; state.vy = 0;
+    state.vx = 0; state.vyaw = 0;
     state.nav.active = false;
+    state.nav.blocked = 0;
     joyRelease();
     state.keysDown = 0; state.keys = Object.create(null);
     state.vis.x = 0; state.vis.y = 0;
@@ -1486,18 +1783,20 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 
   function doReset() {
     state.x = 0; state.y = 0; state.yaw = -Math.PI / 2;
-    state.vx = 0; state.vy = 0;
+    state.vx = 0; state.vyaw = 0;
     state.nav.active = false;
+    state.nav.blocked = 0;
     state.trail.length = 0;
     state.maxSpeed = DEFAULTS.maxSpeed;
     state.turnRate = DEFAULTS.turnRate;
     state.dead = DEFAULTS.dead;
-    state.radar.range = DEFAULTS.range;
-    state.radar.fov = DEFAULTS.fov;
+    state.lidar.range = DEFAULTS.range;
+    state.cam.fov = DEFAULTS.fov;
     state.showGrid = DEFAULTS.grid; state.showTrail = DEFAULTS.trail;
-    state.showRadar = DEFAULTS.radar; state.showBlips = DEFAULTS.blips;
+    state.showLidar = DEFAULTS.lidar; state.showCam = DEFAULTS.cam;
     state.estop = false;
     state.mode = 'idle';
+    state.collision = false; state.blocked = false; state.flash = 0; state.wasInCollision = false;
     joyRelease();
     state.keysDown = 0; state.keys = Object.create(null);
     state.vis.x = 0; state.vis.y = 0;
@@ -1513,20 +1812,31 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     updateHud(0, true);
   }
 
+  function regenerateMap(logIt) {
+    state.obstacles = generateObstacles();
+    state.collision = false; state.blocked = false; state.flash = 0; state.wasInCollision = false;
+    state.nav.active = false;
+    state.nav.blocked = 0;
+    if (logIt) {
+      log('log_map', { n: state.obstacles.length, gap: OBST_GAP.toFixed(1) }, 'ok');
+    }
+    updateHud(0, true);
+  }
+
   /* ------------------------------------------------------------------
-     15. PARAMETER UI
+     16. PARAMETER UI
      ------------------------------------------------------------------ */
   function syncParamUi() {
     if (!dom.rSpeed) { return; }
     dom.rSpeed.value = String(Math.round(state.maxSpeed * 100));
     dom.rTurn.value = String(state.turnRate);
-    dom.rRange.value = String(state.radar.range);
-    dom.rFov.value = String(state.radar.fov);
+    dom.rRange.value = String(state.lidar.range);
+    dom.rFov.value = String(state.cam.fov);
     dom.rDead.value = String(Math.round(state.dead * 100));
     dom.cGrid.checked = state.showGrid;
     dom.cTrail.checked = state.showTrail;
-    dom.cRadar.checked = state.showRadar;
-    dom.cBlips.checked = state.showBlips;
+    dom.cLidar.checked = state.showLidar;
+    dom.cCam.checked = state.showCam;
     refreshParamLabels();
     dom.btnSlow.classList.toggle('is-active', state.maxSpeed <= 0.25);
   }
@@ -1534,8 +1844,8 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   function refreshParamLabels() {
     if (dom.vSpeed) { dom.vSpeed.textContent = Math.round(state.maxSpeed * 100) + '%'; }
     if (dom.vTurn) { dom.vTurn.textContent = state.turnRate.toFixed(1) + ' rad/s'; }
-    if (dom.vRange) { dom.vRange.textContent = state.radar.range.toFixed(1) + ' m'; }
-    if (dom.vFov) { dom.vFov.textContent = Math.round(state.radar.fov) + '°'; }
+    if (dom.vRange) { dom.vRange.textContent = state.lidar.range.toFixed(1) + ' m'; }
+    if (dom.vFov) { dom.vFov.textContent = Math.round(state.cam.fov) + '°'; }
     if (dom.vDead) { dom.vDead.textContent = Math.round(state.dead * 100) + '%'; }
   }
 
@@ -1553,19 +1863,19 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     dom.rSpeed.addEventListener('change', function () { logParam('maxSpeed', Math.round(state.maxSpeed * 100) + '%'); });
 
     dom.rTurn.addEventListener('input', function () {
-      state.turnRate = clamp(parseFloat(this.value), 1, 30); refreshParamLabels();
+      state.turnRate = clamp(parseFloat(this.value), 0.1, 6); refreshParamLabels();
     });
     dom.rTurn.addEventListener('change', function () { logParam('turnRate', state.turnRate.toFixed(1) + ' rad/s'); });
 
     dom.rRange.addEventListener('input', function () {
-      state.radar.range = clamp(parseFloat(this.value), 1, 40); refreshParamLabels();
+      state.lidar.range = clamp(parseFloat(this.value), 1, 30); refreshParamLabels();
     });
-    dom.rRange.addEventListener('change', function () { logParam('range', state.radar.range.toFixed(1) + ' m'); });
+    dom.rRange.addEventListener('change', function () { logParam('range', state.lidar.range.toFixed(1) + ' m'); });
 
     dom.rFov.addEventListener('input', function () {
-      state.radar.fov = clamp(parseFloat(this.value), 10, 180); refreshParamLabels();
+      state.cam.fov = clamp(parseFloat(this.value), 10, 180); refreshParamLabels();
     });
-    dom.rFov.addEventListener('change', function () { logParam('fov', Math.round(state.radar.fov) + '°'); });
+    dom.rFov.addEventListener('change', function () { logParam('fov', Math.round(state.cam.fov) + '°'); });
 
     dom.rDead.addEventListener('input', function () {
       state.dead = clamp(parseInt(this.value, 10) / 100, 0, 0.6); refreshParamLabels();
@@ -1577,8 +1887,8 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       state.showTrail = this.checked;
       if (!this.checked) { state.trail.length = 0; }
     });
-    dom.cRadar.addEventListener('change', function () { state.showRadar = this.checked; });
-    dom.cBlips.addEventListener('change', function () { state.showBlips = this.checked; });
+    dom.cLidar.addEventListener('change', function () { state.showLidar = this.checked; });
+    dom.cCam.addEventListener('change', function () { state.showCam = this.checked; });
 
     dom.robotLabel.addEventListener('input', function () {
       state.label = this.value || 'R-01';
@@ -1586,14 +1896,13 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   /* ------------------------------------------------------------------
-     16. DRAWERS (mobile click-to-expand + outside click closes)
+     17. DRAWERS (mobile click-to-expand + outside click closes)
      ------------------------------------------------------------------ */
   function wireDrawers() {
     dom.drawers.forEach(function (d) {
       d.addEventListener('click', function (e) {
         if (window.matchMedia('(max-width: 1039px)').matches) {
           // only toggle when the click is on the strip or the label
-          if (e.target.closest && e.target.closest('.drawer-body') && d.classList.contains('open')) { return; }
           if (e.target.closest && e.target.closest('.drawer-body')) { return; }
           e.stopPropagation();
           var isOpen = d.classList.contains('open');
@@ -1620,7 +1929,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   /* ------------------------------------------------------------------
-     17. LANGUAGE
+     18. LANGUAGE
      ------------------------------------------------------------------ */
   function setLanguage(next) {
     lang = I18N[next] ? next : 'en';
@@ -1662,21 +1971,10 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   }
 
   /* ------------------------------------------------------------------
-     18. INIT + MAIN LOOP
+     19. INIT + MAIN LOOP
      ------------------------------------------------------------------ */
   var startTime = performance.now();
   var lastFrame = 0;
-
-  function makeBlips() {
-    var rnd = mulberry32(20240607);
-    var out = [];
-    for (var i = 0; i < 16; i++) {
-      var a = rnd() * Math.PI * 2;
-      var d = 2 + rnd() * 9;
-      out.push({ x: Math.cos(a) * d, y: Math.sin(a) * d });
-    }
-    return out;
-  }
 
   function frame(now) {
     var dt = lastFrame ? Math.min((now - lastFrame) / 1000, 0.05) : 0.016;
@@ -1686,7 +1984,6 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     render(now / 1000);
     updateHud(dt, false);
 
-    // fps
     fpsAcc += dt; fpsFrames++; fpsTimer += dt;
     if (fpsTimer >= 0.5) {
       state.fps = fpsFrames / fpsAcc;
@@ -1704,8 +2001,6 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       return;
     }
     ctx = dom.canvas.getContext('2d');
-    state.radar.blips = makeBlips();
-
     resizeCanvas();
 
     // ---- input ----
@@ -1726,8 +2021,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       if (e.button !== 0 && e.pointerType === 'mouse') { return; }
       if (state.estop) { logLocked(); return; }
       var r = dom.canvas.getBoundingClientRect();
-      setTarget((e.clientX - r.left - cw / 2) / PX_PER_M,
-                (e.clientY - r.top - ch / 2) / PX_PER_M);
+      setTarget(s2wX(e.clientX - r.left), s2wY(e.clientY - r.top));
     });
 
     // ---- actions ----
@@ -1736,6 +2030,7 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     dom.btnHome.addEventListener('click', doHome);
     dom.btnSlow.addEventListener('click', doLowSpeed);
     dom.btnReset.addEventListener('click', doReset);
+    dom.btnRegen.addEventListener('click', function () { regenerateMap(true); });
     dom.btnClearLog.addEventListener('click', function () {
       logs.length = 0;
       log('log_cleared', null, 'info');
@@ -1760,8 +2055,19 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
     // ---- boot ----
     var initial = (navigator.language || 'en').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
     setLanguage(initial);
+    regenerateMap(false);
     log('log_boot', null, 'ok');
+    log('log_map', { n: state.obstacles.length, gap: OBST_GAP.toFixed(1) }, 'ok');
     log('log_tip');
+
+    // Small debug handle: inspect/script the console from devtools without
+    // having to reach into DOM internals.
+    window.__teleop = {
+      state: state,
+      setTarget: setTarget,
+      regenerateMap: function () { regenerateMap(true); },
+      nearestObstacle: function () { return nearestObstacle(state.x, state.y); }
+    };
 
     window.requestAnimationFrame(frame);
   }
