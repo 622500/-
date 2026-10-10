@@ -863,8 +863,6 @@ html{scroll-behavior:smooth}
 /* =====================================================================
    ROBOT TELEOP CONSOLE — single file, no dependencies
    Batch 1: perception & environment upgrade.
-   Batch 2: simplified waypoint detour planning (NOT A*).
-   Batch 3: mission state machine + obstacle clearing + live sensors.
 
    Movement model (NON-HOLONOMIC):
      - joystick Y  -> vx    (forward / reverse)
@@ -1134,7 +1132,7 @@ html{scroll-behavior:smooth}
       about_sub: '自动化 x AI 全栈 | 驾驭 AI 的架构师。坦诚记录我的极限开发之路。',
       about_c1_kicker: '01',
       about_c1_title: 'AI 驾驭与全栈实践',
-      about_c1_body: '说实话，这个网页的90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。',
+      about_c1_body: '说实话，这个网页90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。',
       about_c2_kicker: '02',
       about_c2_title: '巡航算法认知',
       about_c2_body: '作为一个自动化学生，我虽不能闭卷手写A*，但我通过AI辅助，深刻理解了‘全局与局部解耦’的巡航逻辑：全局层面，A*负责在静态地图寻找最优路径；局部层面，DWA负责处理动态障碍物微调。我在Canvas操控中，将差速运动学（x += cos(yaw)*v*dt）在浏览器里进行了降维映射，打通了从上位机指令到底盘控制的全局认知。',
@@ -1380,11 +1378,10 @@ html{scroll-behavior:smooth}
   /* ------------------------------------------------------------------
      7B. PATH PLANNING (Batch 2) — geometric detour only, deliberately NOT A*
 
-     One straight leg when it is clear; otherwise a single corner waypoint
-     (the L-shaped detour) or a perpendicular "lane" around the blocking
-     rectangle, giving a 2-3 waypoint path. Pure arithmetic on the current
-     pose: no graph search, no node lists, no dynamic re-planning, so it
-     cannot loop or deadlock.
+     One straight leg when it is clear; otherwise exactly ONE corner
+     waypoint (the L-shaped detour) or a lateral midpoint detour, giving a
+     2-waypoint path. Pure arithmetic on the current pose: no graph search,
+     no node lists, no dynamic re-planning, so it cannot loop or deadlock.
      ------------------------------------------------------------------ */
   function lerp(a, b, t) { return a + (b - a) * t; }
 
@@ -1479,9 +1476,56 @@ html{scroll-behavior:smooth}
 
     if (best) { return best; }
 
-    // nothing clean: keep the straight leg. The collision gate stops the
-    // robot and auto-nav cancels itself after NAV_BLOCK_MAX, so a blocked
-    // target degrades to a warning instead of an infinite retry.
+    // ---- last resort: explicit 2-segment dog-leg -------------------------
+    // The exact corners (tx,fy) / (fx,ty) were already rejected above, so the
+    // turning point is now pushed out in growing steps until both legs are
+    // clear. A blocked target therefore degrades to a real X-then-Y / Y-then-X
+    // detour — never to a straight leg through the wall. The path always ends
+    // at the target, exactly like every other branch above.
+    var grow = PATH_CLEAR + ROBOT_R;          // one push-out step (m)
+    var partial = null, partialLen = Infinity;      // leg 1 clear, leg 2 dirty
+    var lastResort = null, lastLen = Infinity;      // at least reachable
+
+    function dogleg(cx, cy) {
+      // clamp the turning point into the drivable arena first
+      var q = {
+        x: clamp(cx, -ARENA_HX + ROBOT_R, ARENA_HX - ROBOT_R),
+        y: clamp(cy, -ARENA_HY + ROBOT_R, ARENA_HY - ROBOT_R)
+      };
+      var l1 = Math.hypot(q.x - fx, q.y - fy);
+      var l2 = Math.hypot(tx - q.x, ty - q.y);
+      if (l1 < 1e-3 || l2 < 1e-3) { return; }         // degenerate: no dog-leg
+      var spot   = nearestObstacle(q.x, q.y) >= PATH_CLEAR;
+      var reach1 = legClear(fx, fy, q.x, q.y, PATH_CLEAR);
+      var reach2 = legClear(q.x, q.y, tx, ty, PATH_CLEAR);
+      var len = l1 + l2;
+      var cand = [{ x: q.x, y: q.y }, { x: tx, y: ty }];   // last == target
+
+      if (spot && reach1 && reach2) {
+        if (len < bestLen) { bestLen = len; best = cand; }
+      } else if (spot && reach1) {
+        if (len < partialLen) { partialLen = len; partial = cand; }
+      } else if (reach1) {
+        if (len < lastLen) { lastLen = len; lastResort = cand; }
+      }
+    }
+
+    // rings of increasing push-out; the smallest ring that yields a clean
+    // dog-leg wins, so the detour stays as tight as the obstacles allow
+    for (var gi = 0; gi <= 8; gi++) {
+      var g = gi * grow;
+      dogleg(tx + g, fy); dogleg(tx - g, fy);         // X first, then Y
+      dogleg(tx, fy + g); dogleg(tx, fy - g);
+      dogleg(fx + g, ty); dogleg(fx - g, ty);         // Y first, then X
+      dogleg(fx, ty + g); dogleg(fx, ty - g);
+      if (best) { return best; }
+    }
+
+    // target boxed in: prefer a turning point we can actually reach, so the
+    // robot rounds the wall and lets the collision gate / NAV_BLOCK_MAX give
+    // up cleanly instead of driving straight into it
+    if (partial) { return partial; }
+    if (lastResort) { return lastResort; }
     return [{ x: tx, y: ty }];
   }
 
@@ -1624,13 +1668,17 @@ html{scroll-behavior:smooth}
     updateHud(0, true);
   }
 
-  // Path tracking: pursue one waypoint at a time, in order.
+  // Path tracking: pursue one waypoint at a time, strictly in the order stored
+  // in state.path.points. An intermediate waypoint is only ever "consumed" by
+  // advancing state.path.index; only the LAST point may report arrived, so the
+  // drive can never cut a detour short and head straight for the target.
   // returns { vx, vyaw, arrived }
   function navCommand() {
     var pts = state.path.points;
+    if (!pts || pts.length === 0) { return { vx: 0, vyaw: 0, arrived: true }; }
 
-    // skip waypoints we are already standing on (bounded hop count)
-    for (var hop = 0; hop < 3; hop++) {
+    // hop over waypoints we are already standing on (bounded by the path length)
+    for (var hop = 0; hop < pts.length; hop++) {
       if (state.path.index >= pts.length) { return { vx: 0, vyaw: 0, arrived: true }; }
       var w0 = pts[state.path.index];
       if (Math.hypot(w0.x - state.x, w0.y - state.y) >= ARRIVE_EPS) { break; }
@@ -1645,7 +1693,8 @@ html{scroll-behavior:smooth}
     var dx = wp.x - state.x;
     var dy = wp.y - state.y;
     var dist = Math.hypot(dx, dy);
-    if (dist < ARRIVE_EPS) { return { vx: 0, vyaw: 0, arrived: true }; }
+    var isLast = (state.path.index === pts.length - 1);
+    if (dist < ARRIVE_EPS) { return { vx: 0, vyaw: 0, arrived: !!isLast }; }
 
     var err = wrapPi(Math.atan2(dy, dx) - state.yaw);
     var vyaw = clamp(err * NAV_TURN_GAIN, -state.turnRate, state.turnRate);
@@ -1662,6 +1711,11 @@ html{scroll-behavior:smooth}
   /* ------------------------------------------------------------------
      11. INPUT RESOLUTION (single source of truth, joystick > auto-nav)
      ------------------------------------------------------------------ */
+  // Anything at or below this post-dead-zone magnitude is noise (joystick
+  // micro-drift, pointer-capture residue) and must not count as an operator
+  // command: it neither drives the robot nor cancels an active auto-nav.
+  var MANUAL_EPS = 0.05;
+
   function readInput() {
     var nx = 0, ny = 0, src = 'none';
     if (state.estop) { return { nx: 0, ny: 0, mag: 0, src: 'none' }; }
@@ -1681,7 +1735,8 @@ html{scroll-behavior:smooth}
     } else {
       nx = 0; ny = 0;
     }
-    return { nx: nx, ny: ny, mag: Math.hypot(nx, ny), src: src };
+    // mag is the post-dead-zone deflection: sub-dead-zone drift reports 0
+    return { nx: nx, ny: ny, mag: eff, src: src };
   }
 
   /* ------------------------------------------------------------------
@@ -1689,7 +1744,14 @@ html{scroll-behavior:smooth}
      ------------------------------------------------------------------ */
   function update(dt) {
     var inp = readInput();
-    var manual = inp.mag > 0.0001;
+    // Priority model (single source of truth):
+    //   manual   : any deliberate deflection past the noise floor (stick OR keys)
+    //   stick    : a LIVE joystick past the noise floor — the ONLY thing that may
+    //              seize the robot from auto-nav
+    //   override : what the auto-nav gates below actually test
+    var manual   = inp.mag > MANUAL_EPS;
+    var stick    = !!state.joy.active && inp.mag > MANUAL_EPS;
+    var override = stick;
 
     // ---- mission layer (runs before the drive selection) -------------
     if (state.mission.name === 'CLEARING') {
@@ -1711,8 +1773,9 @@ html{scroll-behavior:smooth}
       }
     }
 
-    if (manual && state.nav.active) { cancelNav('log_cancel'); }
-    if (manual && (state.mission.name === 'CRUISING' || state.mission.name === 'RETURNING')) {
+    // micro-drift (mag <= MANUAL_EPS) never reaches here, so auto-nav is safe
+    if (override && state.nav.active) { cancelNav('log_cancel'); }
+    if (override && (state.mission.name === 'CRUISING' || state.mission.name === 'RETURNING')) {
       setMission('IDLE');
     }
 
@@ -1724,10 +1787,12 @@ html{scroll-behavior:smooth}
       // a task owns the robot: hold station until it finishes
       wantVx = 0; wantVyaw = 0;
       state.mode = 'idle';
-    } else if (manual) {
+    } else if (override || (manual && !state.nav.active)) {
       // NON-HOLONOMIC MAPPING:
       //   stick up    (ny = -1) -> forward (+vx)
       //   stick right (nx = +1) -> clockwise (+yaw; screen +y points down)
+      // Keyboard drives only when auto-nav is already off, so it can never
+      // steer the robot while a planned path is being followed.
       wantVx   = -inp.ny * state.maxSpeed * BASE_SPEED;
       wantVyaw =  inp.nx * state.turnRate;
       state.mode = 'manual';
@@ -2964,7 +3029,6 @@ html{scroll-behavior:smooth}
     init();
   }
 })();
-
 /* =====================================================================
    ALGO DEMO MODAL — A* visualiser + shared-state synchronisation.
 
@@ -3206,10 +3270,24 @@ html{scroll-behavior:smooth}
     termLine('> ' + syncInfo.note, 'dim');
     termLine('> walls: ' + syncInfo.walls + ' cells projected from the main map', 'dim');
     termLine('> start (' + START.x + ',' + START.y + ')   goal (' + GOAL.x + ',' + GOAL.y + ')', 'dim');
-    termLine('> heuristic Manhattan   f = g + h', 'dim');
+    termLine('> heuristic Euclidean   f = g + h', 'dim');
   }
 
-  function dist(x, y) { return Math.abs(x - GOAL.x) + Math.abs(y - GOAL.y); }
+  // Euclidean (straight-line) heuristic. Admissible for the 8-neighbourhood
+  // below, so the search still returns a minimum-cost path — but it no longer
+  // over-estimates in the diagonal direction the way Manhattan did, which is
+  // what produced the jagged staircase hugging (and clipping) wall corners.
+  function dist(x, y) { return Math.hypot(x - GOAL.x, y - GOAL.y); }
+
+  // 8-neighbourhood with octile costs: orthogonal 1, diagonal sqrt(2).
+  var SQRT2 = Math.SQRT2;
+  var DIRS8 = [
+    [ 1,  0, 1],     [-1,  0, 1],     [ 0,  1, 1],     [ 0, -1, 1],
+    [ 1,  1, SQRT2], [ 1, -1, SQRT2], [-1,  1, SQRT2], [-1, -1, SQRT2]
+  ];
+
+  // gScore / H are floats now, so pad() (built for ints) would print 1.4142135…
+  function fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
 
   function step() {
     if (!exploring) { return; }
@@ -3231,8 +3309,8 @@ html{scroll-behavior:smooth}
     var ck = cur.x + ',' + cur.y;
     closedSet[ck] = true;
     explored++;
-    termLine('> Opening node (' + pad(cur.x) + ',' + pad(cur.y) + ') | F=' + pad(bf) +
-             ' G=' + pad(gScore[ck]) + ' H=' + pad(dist(cur.x, cur.y)), 'info');
+    termLine('> Opening node (' + pad(cur.x) + ',' + pad(cur.y) + ') | F=' + fmt(bf) +
+             ' G=' + fmt(gScore[ck]) + ' H=' + fmt(dist(cur.x, cur.y)), 'info');
 
     if (cur.x === GOAL.x && cur.y === GOAL.y) {
       var p = [], key = ck, parts;
@@ -3247,17 +3325,28 @@ html{scroll-behavior:smooth}
       solved = true; exploring = false;
       buildArc();
       termLine('> Path found! Smoothing trajectory...', 'ok');
-      termLine('  cost=' + (p.length - 1) + ' steps   nodes=' + explored +
+      termLine('  cost=' + fmt(gScore[ck]) + '   nodes=' + explored +
                '   spline=' + smoothed.length + ' pts', 'ok');
       termLine('> Differential-drive arc ready. Close & reopen to replay.', 'ok');
       stopStepping();
       return;
     }
 
-    var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    for (i = 0; i < DIRS.length; i++) {
-      var nx = cur.x + DIRS[i][0], ny = cur.y + DIRS[i][1];
+    for (i = 0; i < DIRS8.length; i++) {
+      var ddx = DIRS8[i][0], ddy = DIRS8[i][1], stepCost = DIRS8[i][2];
+      var nx = cur.x + ddx, ny = cur.y + ddy;
       if (nx < 0 || ny < 0 || nx >= N || ny >= N) { continue; }
+
+      // No corner cutting: a diagonal step is legal only when BOTH orthogonal
+      // neighbours are free, otherwise the smoothed arc clips the wall corner.
+      if (ddx !== 0 && ddy !== 0 && (isWall(cur.x + ddx, cur.y) || isWall(cur.x, cur.y + ddy))) {
+        wallHits++;
+        if (wallHits % 5 === 1) {
+          termLine('  ! Corner clipped at (' + pad(nx) + ',' + pad(ny) + '), rerouting...', 'hit');
+        }
+        continue;
+      }
+
       if (isWall(nx, ny)) {
         wallHits++;
         if (wallHits % 5 === 1) {
@@ -3267,7 +3356,7 @@ html{scroll-behavior:smooth}
       }
       var nk = nx + ',' + ny;
       if (closedSet[nk]) { continue; }
-      var tentative = gScore[ck] + 1;
+      var tentative = gScore[ck] + stepCost;
       if (gScore[nk] === undefined || tentative < gScore[nk]) {
         cameFrom[nk] = ck;
         gScore[nk] = tentative;
