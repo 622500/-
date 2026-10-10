@@ -464,6 +464,53 @@ html{scroll-behavior:smooth}
   #about .grid3{grid-template-columns:1fr;gap:12px}
   #about .about-title .en{white-space:normal}
 }
+
+/* =====================================================================
+   ALGO DEMO MODAL  (self-contained: .algo-* / #algoCanvas only)
+   ===================================================================== */
+.algo-open{
+  width:100%;color:#d7f7ff;border-color:rgba(34,211,238,.4);
+  background:linear-gradient(180deg,#12233a,#0b1524);
+}
+.algo-open:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+
+.algo-modal{
+  position:fixed;inset:0;z-index:200;display:none;
+  align-items:center;justify-content:center;padding:18px;
+  background:rgba(3,7,13,.82);backdrop-filter:blur(3px);
+}
+.algo-modal.open{display:flex}
+.algo-box{
+  width:min(560px,100%);max-height:92vh;overflow:auto;
+  background:linear-gradient(180deg,#0e1a2b,#0a1320);
+  border:1px solid var(--line);border-radius:16px;padding:16px;
+  box-shadow:0 30px 80px rgba(0,0,0,.7);
+}
+.algo-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.algo-title{
+  flex:1;font-size:13px;font-weight:700;letter-spacing:.02em;
+  color:var(--txt);line-height:1.4;
+}
+.algo-close{
+  flex:0 0 auto;padding:7px 12px;border-radius:9px;cursor:pointer;
+  border:1px solid #24405f;background:#0a1320;color:var(--cyan);
+  font-size:12px;font-weight:650;
+  transition:border-color .18s,box-shadow .18s;
+}
+.algo-close:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+#algoCanvas{
+  display:block;width:100%;aspect-ratio:1/1;
+  border:1px solid var(--line);border-radius:12px;background:#080d16;
+}
+.algo-legend{
+  display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;
+  font-size:10.5px;color:var(--dim-2);
+}
+.algo-legend i{
+  display:inline-block;width:8px;height:8px;border-radius:2px;
+  margin-right:5px;vertical-align:middle;
+}
+.algo-status{margin-top:8px;font-family:var(--mono);font-size:11.5px;color:var(--cyan)}
 </style>
 </head>
 <body>
@@ -634,6 +681,9 @@ html{scroll-behavior:smooth}
         </div>
       </div>
 
+      <!-- ALGO DEMO trigger -->
+      <button class="btn algo-open" id="algoOpen" type="button" data-i18n="algo_btn">▶ 算法演示 | ALGO DEMO</button>
+
       <!-- Event log -->
       <div class="card">
         <div class="card-title"><span data-i18n="log_title">Event log</span>
@@ -715,6 +765,26 @@ html{scroll-behavior:smooth}
     </div>
   </section>
 </div>
+
+  <!-- ================= ALGO DEMO MODAL (isolated) ================= -->
+  <div class="algo-modal" id="algoModal" aria-hidden="true">
+    <div class="algo-box" role="dialog" aria-modal="true" aria-labelledby="algoTitle">
+      <div class="algo-head">
+        <h3 class="algo-title" id="algoTitle" data-i18n="algo_title">A* 全局路径规划可视化 | A* Global Path Planning</h3>
+        <button class="algo-close" id="algoClose" type="button" data-i18n="algo_close">关闭 | CLOSE</button>
+      </div>
+      <canvas id="algoCanvas"></canvas>
+      <div class="algo-legend">
+        <span><i style="background:#34d399"></i>Start 起点</span>
+        <span><i style="background:#f87171"></i>Goal 终点</span>
+        <span><i style="background:#a78bfa"></i>Obstacle 障碍</span>
+        <span><i style="background:#fbbf24"></i>Open 待探索</span>
+        <span><i style="background:#1e3a8a"></i>Closed 已探索</span>
+        <span><i style="background:#22d3ee"></i>Path 路径</span>
+      </div>
+      <div class="algo-status" id="algoStatus">…</div>
+    </div>
+  </div>
 
 <script>
 /* =====================================================================
@@ -909,7 +979,10 @@ html{scroll-behavior:smooth}
       about_c3_body: 'Real engineering is a fight with reality. I ran into DSH sandbox file-write errors, a tablet browser running out of memory so GitHub could not commit, and even GitHub being blocked. I got past it by uploading files to overwrite, and broke through the cache with incognito mode. What I now understand deeply: for extreme delivery, a stable MVP always beats a perfect solution that will not run.',
       about_c3_sub_label: 'PLUGIN EXPLORATION',
       about_c3_sub_body: 'I attempted to deploy the dsh-synapse plugin in an Android Termux environment but encountered a compilation failure of require-builtin.node under ARM64. I pivoted to a desktop environment to re-trace the dependency chain. Although this attempt was incomplete, it taught me the value of resilience and post-mortem analysis in AI engineering.',
-      about_cta: 'Enter the console \u2193'
+      about_cta: 'Enter the console \u2193',
+      algo_btn: '\u25b6 \u7b97\u6cd5\u6f14\u793a | ALGO DEMO',
+      algo_title: 'A* \u5168\u5c40\u8def\u5f84\u89c4\u5212\u53ef\u89c6\u5316 | A* Global Path Planning',
+      algo_close: '\u5173\u95ed | CLOSE'
     },
     zh: {
       app_title: '机器人遥操作控制台',
@@ -997,7 +1070,10 @@ html{scroll-behavior:smooth}
       about_c3_body: '真正的工程是一场与现实的搏斗。我遭遇了DSH沙箱写文件报错、平板浏览器内存溢出导致GitHub无法Commit、甚至GitHub被墙。我最终通过“上传文件覆盖”绕过限制，并用无痕模式击穿了缓存。我深刻明白：在极限交付中，稳定的MVP（最小可行性产品）永远优于跑不起来的完美方案。',
       about_c3_sub_label: '插件探索',
       about_c3_sub_body: '我尝试在安卓 Termux 环境下部署 dsh-synapse（会话地图插件），遭遇了 ARM64 架构下原生模块 require-builtin.node 的编译缺失。这让我意识到移动端部署 AI 环境存在巨大的兼容性壁垒。随后我果断止损，转向标准桌面环境（笔记本）重新梳理 Node.js、pnpm 与 DSH 插件的依赖链路。虽未能完美跑通，但这次失败让我深刻理解了 DSH 的微内核插件机制。从‘使用者’向‘创造者’迈进，我选择从失败中复盘，而非止步于表面。',
-      about_cta: '进入控制台 ↓'
+      about_cta: '进入控制台 ↓',
+      algo_btn: '▶ 算法演示 | ALGO DEMO',
+      algo_title: 'A* 全局路径规划可视化 | A* Global Path Planning',
+      algo_close: '关闭 | CLOSE'
     }
   };
 
@@ -2814,6 +2890,229 @@ html{scroll-behavior:smooth}
   } else {
     init();
   }
+})();
+
+/* =====================================================================
+   ALGO DEMO MODAL — fully self-contained (Batch "A* visualization").
+   Own scope (its own IIFE), own canvas (#algoCanvas), own element ids.
+   It reads nothing from the teleop console and writes nothing into it,
+   so the joystick / #map rendering / mission state machine are untouched.
+   ===================================================================== */
+(function () {
+  'use strict';
+
+  var N = 15;                          // 15 x 15 grid
+  var START = { x: 0, y: 0 };          // top-left
+  var GOAL  = { x: N - 1, y: N - 1 };  // bottom-right
+  var STEP_MS = 50;                    // one node per 50 ms
+  var HOLD_MS = 2500;                  // pause on the finished path, then replay
+
+  // ---- fixed obstacle layout (always solvable, forced zig-zag) ----
+  var WALLS = (function () {
+    var list = [], x, y;
+    for (y = 0; y <= 10; y++) { list.push(4 + ',' + y); }   // wall with a gap at the bottom
+    for (y = 4; y <= 14; y++) { list.push(9 + ',' + y); }   // wall with a gap at the top
+    list.push('6,6'); list.push('7,6'); list.push('6,7'); list.push('7,7');
+    list.push('11,7'); list.push('11,8'); list.push('11,9');
+    return list;
+  })();
+  function isWall(x, y) { return WALLS.indexOf(x + ',' + y) >= 0; }
+
+  var modal    = document.getElementById('algoModal');
+  var canvas   = document.getElementById('algoCanvas');
+  var openBtn  = document.getElementById('algoOpen');
+  var closeBtn = document.getElementById('algoClose');
+  var statusEl = document.getElementById('algoStatus');
+  if (!modal || !canvas || !openBtn || !closeBtn) { return; }
+
+  var ctx = canvas.getContext('2d');
+  var cw = 0, ch = 0, cell = 0, timer = null;
+
+  // ---- search state (rebuilt on every run) ----
+  var openList, closedSet, cameFrom, gScore, path, solved, failed, hold, explored;
+
+  function reset() {
+    openList = [{ x: START.x, y: START.y }];
+    closedSet = {};
+    cameFrom = {};
+    gScore = {};
+    gScore[START.x + ',' + START.y] = 0;
+    path = null; solved = false; failed = false; hold = 0; explored = 0;
+  }
+
+  function dist(x, y) { return Math.abs(x - GOAL.x) + Math.abs(y - GOAL.y); }  // Manhattan
+
+  function step() {
+    if (solved || failed) {
+      if (hold > 0) { hold -= STEP_MS; if (hold <= 0) { reset(); } }
+      draw();
+      return;
+    }
+    if (openList.length === 0) { failed = true; hold = HOLD_MS; draw(); return; }
+
+    // pick the frontier node with the lowest f = g + h
+    var bi = 0, bf = Infinity, i, n, f;
+    for (i = 0; i < openList.length; i++) {
+      n = openList[i];
+      f = gScore[n.x + ',' + n.y] + dist(n.x, n.y);
+      if (f < bf) { bf = f; bi = i; }
+    }
+    var cur = openList.splice(bi, 1)[0];
+    var ck = cur.x + ',' + cur.y;
+    closedSet[ck] = true;
+    explored++;
+
+    if (cur.x === GOAL.x && cur.y === GOAL.y) {
+      var p = [], key = ck, parts;
+      while (key) {
+        parts = key.split(',');
+        p.push({ x: parseInt(parts[0], 10), y: parseInt(parts[1], 10) });
+        key = cameFrom[key];
+      }
+      p.reverse();
+      path = p; solved = true; hold = HOLD_MS;
+      draw();
+      return;
+    }
+
+    var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (i = 0; i < DIRS.length; i++) {
+      var nx = cur.x + DIRS[i][0], ny = cur.y + DIRS[i][1];
+      if (nx < 0 || ny < 0 || nx >= N || ny >= N) { continue; }
+      if (isWall(nx, ny)) { continue; }
+      var nk = nx + ',' + ny;
+      if (closedSet[nk]) { continue; }
+      var tentative = gScore[ck] + 1;
+      if (gScore[nk] === undefined || tentative < gScore[nk]) {
+        cameFrom[nk] = ck;
+        gScore[nk] = tentative;
+        if (!openList.some(function (q) { return q.x === nx && q.y === ny; })) {
+          openList.push({ x: nx, y: ny });
+        }
+      }
+    }
+    draw();
+  }
+
+  function fit() {
+    var w = Math.max(1, Math.round(canvas.clientWidth || 1));
+    var h = Math.round(canvas.clientHeight || 0);
+    if (h <= 1) { h = w; }                       // fallback if aspect-ratio is unsupported
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cw = w; ch = h;
+    cell = Math.min(cw, ch) / N;
+    draw();
+  }
+
+  function draw() {
+    if (!cell) { return; }
+    var i, x, y, px, py, key, cx0, cy0, bx, by, ang, s;
+    var openMap = {};
+    if (openList) { for (i = 0; i < openList.length; i++) { openMap[openList[i].x + ',' + openList[i].y] = true; } }
+
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.fillStyle = '#080d16';
+    ctx.fillRect(0, 0, cw, ch);
+
+    // cells: obstacle / closed / open / free
+    for (y = 0; y < N; y++) {
+      for (x = 0; x < N; x++) {
+        key = x + ',' + y;
+        px = x * cell; py = y * cell;
+        if (isWall(x, y)) { ctx.fillStyle = '#a78bfa'; }
+        else if (closedSet && closedSet[key]) { ctx.fillStyle = '#1e3a8a'; }
+        else if (openMap[key]) { ctx.fillStyle = 'rgba(251,191,36,.8)'; }
+        else { ctx.fillStyle = 'rgba(148,169,196,.06)'; }
+        ctx.fillRect(px + 1, py + 1, cell - 2, cell - 2);
+      }
+    }
+
+    // grid lines
+    ctx.strokeStyle = 'rgba(127,150,184,.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (i = 0; i <= N; i++) {
+      px = Math.round(i * cell) + 0.5;
+      ctx.moveTo(px, 0); ctx.lineTo(px, N * cell);
+      ctx.moveTo(0, px); ctx.lineTo(N * cell, px);
+    }
+    ctx.stroke();
+
+    // start (green) and goal (red)
+    ctx.fillStyle = '#34d399';
+    ctx.fillRect(START.x * cell + 2, START.y * cell + 2, cell - 4, cell - 4);
+    ctx.fillStyle = '#f87171';
+    ctx.fillRect(GOAL.x * cell + 2, GOAL.y * cell + 2, cell - 4, cell - 4);
+
+    // final path: cyan dashed line + arrow heads
+    if (path && path.length > 1) {
+      ctx.save();
+      ctx.strokeStyle = '#22d3ee';
+      ctx.lineWidth = Math.max(2, cell * 0.16);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.setLineDash([Math.max(4, cell * 0.34), Math.max(3, cell * 0.24)]);
+      ctx.beginPath();
+      for (i = 0; i < path.length; i++) {
+        cx0 = (path[i].x + 0.5) * cell; cy0 = (path[i].y + 0.5) * cell;
+        if (i === 0) { ctx.moveTo(cx0, cy0); } else { ctx.lineTo(cx0, cy0); }
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      for (i = 1; i < path.length; i++) {
+        cx0 = (path[i].x + 0.5) * cell; cy0 = (path[i].y + 0.5) * cell;
+        bx = (path[i - 1].x + 0.5) * cell; by = (path[i - 1].y + 0.5) * cell;
+        ang = Math.atan2(cy0 - by, cx0 - bx);
+        s = Math.max(3, cell * 0.22);
+        ctx.save();
+        ctx.translate(cx0, cy0);
+        ctx.rotate(ang);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-s, -s * 0.6);
+        ctx.lineTo(-s, s * 0.6);
+        ctx.closePath();
+        ctx.fillStyle = '#67e8f9';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    if (statusEl) {
+      if (failed) { statusEl.textContent = '无解 No path found'; }
+      else if (solved) { statusEl.textContent = '路径 Path: ' + Math.max(0, path.length - 1) + ' 步 steps | 已探索 Explored: ' + explored; }
+      else { statusEl.textContent = '待探索 Open: ' + openList.length + ' | 已探索 Explored: ' + explored + ' | f = g + h'; }
+    }
+  }
+
+  function openModal() {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    fit();                       // must run AFTER .open, while the canvas has a size
+    reset();
+    if (timer) { clearInterval(timer); }
+    timer = setInterval(step, STEP_MS);
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    if (timer) { clearInterval(timer); timer = null; }
+  }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) { closeModal(); } });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('open')) { closeModal(); }
+  });
+  window.addEventListener('resize', function () {
+    if (modal.classList.contains('open')) { fit(); }
+  });
 })();
 </script>
 </body>
