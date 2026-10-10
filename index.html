@@ -653,6 +653,22 @@ html{scroll-behavior:smooth}
           <input id="rDead" type="range" min="0" max="40" step="1" value="12" />
         </label>
 
+        <!-- PID gains for auto-navigation (speed loop) -->
+        <label class="field">
+          <span class="field-top"><b>PID &middot; Kp</b><i id="vKp">0.90</i></span>
+          <input id="rKp" type="range" min="0" max="3" step="0.05" value="0.9" />
+        </label>
+
+        <label class="field">
+          <span class="field-top"><b>PID &middot; Ki</b><i id="vKi">0.15</i></span>
+          <input id="rKi" type="range" min="0" max="1" step="0.01" value="0.15" />
+        </label>
+
+        <label class="field">
+          <span class="field-top"><b>PID &middot; Kd</b><i id="vKd">0.08</i></span>
+          <input id="rKd" type="range" min="0" max="1" step="0.01" value="0.08" />
+        </label>
+
         <div class="toggles">
           <label class="tg"><input id="cGrid"  type="checkbox" checked /><span data-i18n="t_grid">Grid</span></label>
           <label class="tg"><input id="cTrail" type="checkbox" checked /><span data-i18n="t_trail">Trail</span></label>
@@ -812,13 +828,91 @@ html{scroll-behavior:smooth}
           <span class="chip" id="hudPos">X 0.00 · Y 0.00</span>
           <span class="chip" id="hudClear">Clearance 0.00 m</span>
         </div>
+        <!-- real-time oscilloscope: velocity & position-error vs time -->
+        <div id="oscWrap" style="position:absolute;right:10px;bottom:44px;width:264px;height:112px;border:1px solid #1b2a41;border-radius:12px;background:rgba(6,12,20,.82);overflow:hidden;pointer-events:none">
+          <canvas id="oscCanvas" style="display:block;width:100%;height:100%"></canvas>
+        </div>
         <div class="canvas-hint" id="canvasHint" data-i18n="hint_click">Click the map to navigate</div>
         <div class="legend">
           <span><i style="background:#34d399"></i><span data-i18n="lg_lidar">LiDAR</span></span>
           <span><i style="background:#a78bfa"></i><span data-i18n="lg_cam">Camera FOV</span></span>
           <span><i style="background:#22d3ee"></i><span data-i18n="lg_path">Path</span></span>
           <span><i style="background:#94a9c4"></i><span data-i18n="lg_obs">Obstacle</span></span>
+          <span><i style="background:#e879f9"></i><span>Dynamic</span></span>
         </div>
+        <!-- perception overlay: ground-truth / measured / filtered markers -->
+        <canvas id="perceptionOverlay" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none"></canvas>
+      </div>
+
+      <!-- ============ EMBEDDED RESEARCH TELEMETRY (below the map) ============ -->
+      <div id="telemetryPanel" style="flex:0 0 auto;border:1px solid #1b2a41;border-radius:12px;background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#5b7093">
+          <span style="color:#22d3ee">Research Telemetry / 研究遥测</span>
+          <span id="researchMetrics" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:#b9cfe8">Dynamic Encounters: 0 · Min Clearance: 0.00 m</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:#67e8f9;margin-bottom:4px">VELOCITY v (m/s)</div>
+            <canvas id="telemetry-speed" style="display:block;width:100%;height:92px;background:#04070b;border:1px solid #16283f;border-radius:8px"></canvas>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:#fbbf24;margin-bottom:4px">CLEARANCE d_min (m)</div>
+            <canvas id="telemetry-clearance" style="display:block;width:100%;height:92px;background:#04070b;border:1px solid #16283f;border-radius:8px"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ ADVANCED CONTROL & PERCEPTION (stacked) ============ -->
+      <div id="researchPanels" style="flex:0 0 auto;display:flex;flex-direction:column;gap:12px">
+
+        <!-- ---------------- CONTROL LAYER ---------------- -->
+        <section id="pidPanel" style="border:1px solid #1b2a41;border-radius:12px;background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));padding:10px 12px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#5b7093">
+            <span style="color:#22d3ee">PID Tuning / 控制层</span>
+            <span id="pidPreset" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:#b9cfe8">preset: default</span>
+            <button class="btn ghost" id="pidPresetBtn" type="button" style="width:auto;padding:4px 10px;font-size:11px">Preset</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <label class="field" style="margin:0">
+              <span class="field-top"><b>Kp</b><i id="pidVKp">1.50</i></span>
+              <input id="pidKp" type="range" min="0" max="3" step="0.05" value="1.5" />
+            </label>
+            <label class="field" style="margin:0">
+              <span class="field-top"><b>Ki</b><i id="pidVKi">0.10</i></span>
+              <input id="pidKi" type="range" min="0" max="1" step="0.01" value="0.1" />
+            </label>
+            <label class="field" style="margin:0">
+              <span class="field-top"><b>Kd</b><i id="pidVKd">0.20</i></span>
+              <input id="pidKd" type="range" min="0" max="1" step="0.01" value="0.2" />
+            </label>
+          </div>
+          <div style="margin-top:8px">
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:#67e8f9;margin-bottom:4px">LINEAR VELOCITY v (m/s) — LAST 100 SAMPLES</div>
+            <canvas id="pidCanvas" style="display:block;width:100%;height:92px;background:#04070b;border:1px solid #16283f;border-radius:8px"></canvas>
+          </div>
+        </section>
+
+        <!-- ---------------- PERCEPTION LAYER ---------------- -->
+        <section id="filterPanel" style="border:1px solid #1b2a41;border-radius:12px;background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));padding:10px 12px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#5b7093">
+            <span style="color:#34d399">Sensor Filter / 感知层</span>
+            <span id="filterReadout" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:#b9cfe8">|err| meas 0.00 m · filt 0.00 m</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+            <label class="field" style="margin:0">
+              <span class="field-top"><b>noiseLevel &sigma;</b><i id="filtVSigma">0.15 m</i></span>
+              <input id="filtSigma" type="range" min="0" max="1" step="0.01" value="0.15" />
+            </label>
+            <label class="field" style="margin:0">
+              <span class="field-top"><b>alpha &alpha;</b><i id="filtVAlpha">0.80</i></span>
+              <input id="filtAlpha" type="range" min="0.5" max="1" step="0.01" value="0.8" />
+            </label>
+          </div>
+          <div style="margin-top:8px">
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:#fbbf24;margin-bottom:4px">ABS ERROR |meas − truth| vs |filt − truth| (m) — LAST 100 SAMPLES</div>
+            <canvas id="filterCanvas" style="display:block;width:100%;height:92px;background:#04070b;border:1px solid #16283f;border-radius:8px"></canvas>
+          </div>
+        </section>
       </div>
     </div>
   </section>
@@ -845,6 +939,54 @@ html{scroll-behavior:smooth}
           <div class="algo-term-body" id="algoTerm"></div>
           <div class="algo-term-prompt">&gt;&nbsp;<span class="algo-cursor"></span></div>
         </div>
+      </div>
+
+      <!-- ============ RESEARCH BENCHMARK PANEL (appended) ============ -->
+      <div id="algoBench" style="margin-top:12px;border:1px solid #16283f;border-radius:12px;background:#04070c;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;color:#5b7093;letter-spacing:.08em">
+          <span>BENCHMARK / 基准测试</span>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:#67e8f9;letter-spacing:0">
+            <input id="algoCompare" type="checkbox" style="accent-color:#22d3ee" />
+            <span>Compare Dijkstra / 对比 Dijkstra</span>
+          </label>
+          <button class="algo-close" id="algoStart" type="button" style="margin-left:auto">Start / 开始</button>
+          <button class="algo-close" id="algoExport" type="button">Export CSV</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;color:#b9cfe8">
+          <thead>
+            <tr style="color:#5b7093;text-align:left">
+              <th style="padding:3px 6px;border-bottom:1px solid #142438;font-weight:600">METRIC</th>
+              <th style="padding:3px 6px;border-bottom:1px solid #142438;font-weight:600;color:#67e8f9">A*</th>
+              <th id="algoThDij" style="padding:3px 6px;border-bottom:1px solid #142438;font-weight:600;color:#e879f9">Dijkstra</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#5b7093">Nodes Expanded</td>
+              <td id="algoMAstNodes" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#67e8f9">0</td>
+              <td id="algoMDijNodes" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#e879f9">–</td>
+            </tr>
+            <tr>
+              <td style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#5b7093">Path Length</td>
+              <td id="algoMAstLen" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#67e8f9">–</td>
+              <td id="algoMDijLen" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#e879f9">–</td>
+            </tr>
+            <tr>
+              <td style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#5b7093">Execution Time (ms)</td>
+              <td id="algoMAstMs" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#67e8f9">0.0</td>
+              <td id="algoMDijMs" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#e879f9">–</td>
+            </tr>
+            <tr>
+              <td style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#5b7093">Revealed (sync)</td>
+              <td id="algoMAstRev" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#67e8f9">–</td>
+              <td id="algoMDijRev" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#e879f9">–</td>
+            </tr>
+            <tr>
+              <td style="padding:3px 6px;color:#5b7093">Efficiency</td>
+              <td id="algoMEff" colspan="2" style="padding:3px 6px;color:#b9cfe8">–</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="algo-legend">
@@ -925,6 +1067,18 @@ html{scroll-behavior:smooth}
     // navigation (steer-then-drive) + Batch 2 waypoint path
     nav: { active: false, x: 0, y: 0, blocked: 0 },
     path: { points: [], index: 0 },
+    // PID speed loop for auto-nav (Kp/Ki/Kd live on the Parameters drawer)
+    pid: { kp: 1.50, ki: 0.10, kd: 0.20, integral: 0, lastError: 0, iClamp: 2.0 },
+    // oscilloscope ring buffers: velocity (m/s) and position error (m) vs time
+    osc: { ts: [], vel: [], err: [], t: 0, timer: 0, paused: false, max: 480 },
+    // research: one dynamic obstacle patrolling along X at constant speed
+    dyn: { x: -4.5, y: 1.5, vx: 0.5, minX: -4.5, maxX: 4.5, active: true },
+    // research: encounter counter + rolling telemetry window (last 100 points)
+    research: {
+      encounters: 0, minClearance: Infinity, dynMinClearance: Infinity,
+      speed: [], clear: [], telTimer: 0, samples: 0,
+      cooldown: 0, legBlocked: false, wasBraking: false, speedPeak: 0, lastMetrics: ''
+    },
     // Batch 3: mission layer + simulated telemetry
     mission: { name: 'IDLE', inspect: 0, clear: { obstacle: null, t: 0, dur: 2.0 } },
     sensor: { batt: 100, cpu: 34, gpu: 27, points: 900, lowBatt: false, timer: null },
@@ -1228,6 +1382,13 @@ html{scroll-behavior:smooth}
     dom.rRange = $('#rRange'); dom.vRange = $('#vRange');
     dom.rFov   = $('#rFov');   dom.vFov   = $('#vFov');
     dom.rDead  = $('#rDead');  dom.vDead  = $('#vDead');
+    dom.rKp = $('#rKp'); dom.vKp = $('#vKp');
+    dom.rKi = $('#rKi'); dom.vKi = $('#vKi');
+    dom.rKd = $('#rKd'); dom.vKd = $('#vKd');
+    dom.oscCanvas = $('#oscCanvas');
+    dom.telemetrySpeed = $('#telemetry-speed');
+    dom.telemetryClearance = $('#telemetry-clearance');
+    dom.researchMetrics = $('#researchMetrics');
     dom.cGrid = $('#cGrid'); dom.cTrail = $('#cTrail');
     dom.cLidar = $('#cLidar'); dom.cCam = $('#cCam');
     dom.robotLabel = $('#robotLabel');
@@ -1308,6 +1469,9 @@ html{scroll-behavior:smooth}
       var d = rectDistance(state.obstacles[i], px, py);
       if (d < best) { best = d; }
     }
+    // research: the moving entity is a first-class obstacle for the drive stack
+    var dd = rectDistance(dynRect(), px, py);
+    if (dd < best) { best = dd; }
     return best;
   }
 
@@ -1648,6 +1812,10 @@ html{scroll-behavior:smooth}
     state.nav.x = p.x; state.nav.y = p.y;
     state.nav.active = true;
     state.nav.blocked = 0;
+    // fresh target -> reset the PID state and restart the oscilloscope trace
+    state.pid.integral = 0;
+    state.pid.lastError = 0;
+    resetOscilloscope();
     // Batch 2: build the 1-2 waypoint detour for this target
     state.path.points = planPath(state.x, state.y, p.x, p.y);
     state.path.index = 0;
@@ -1672,9 +1840,17 @@ html{scroll-behavior:smooth}
   // in state.path.points. An intermediate waypoint is only ever "consumed" by
   // advancing state.path.index; only the LAST point may report arrived, so the
   // drive can never cut a detour short and head straight for the target.
+  //
+  // Linear speed now comes from a PID controller on the distance error:
+  //   e = ||waypoint - pose||      i += e*dt      d = (e - e_prev)/dt
+  //   v = Kp*e + Ki*i + Kd*d       (clamped to [0, vMax])
+  // Heading stays a separate, faster clamped P loop, so the two loops do not
+  // fight each other; the integral is reset on every waypoint switch.
   // returns { vx, vyaw, arrived }
-  function navCommand() {
+  function navCommand(dt) {
     var pts = state.path.points;
+    var P = state.pid;
+    if (!(dt > 0)) { dt = 0.016; }
     if (!pts || pts.length === 0) { return { vx: 0, vyaw: 0, arrived: true }; }
 
     // hop over waypoints we are already standing on (bounded by the path length)
@@ -1684,6 +1860,7 @@ html{scroll-behavior:smooth}
       if (Math.hypot(w0.x - state.x, w0.y - state.y) >= ARRIVE_EPS) { break; }
       if (state.path.index === pts.length - 1) { return { vx: 0, vyaw: 0, arrived: true }; }
       state.path.index++;
+      P.integral = 0; P.lastError = 0;        // anti-windup across segments
       log('log_waypoint', { i: state.path.index, n: pts.length }, 'info');
     }
 
@@ -1692,19 +1869,26 @@ html{scroll-behavior:smooth}
 
     var dx = wp.x - state.x;
     var dy = wp.y - state.y;
-    var dist = Math.hypot(dx, dy);
+    var error = Math.hypot(dx, dy);            // PID process variable
     var isLast = (state.path.index === pts.length - 1);
-    if (dist < ARRIVE_EPS) { return { vx: 0, vyaw: 0, arrived: !!isLast }; }
+    if (error < ARRIVE_EPS) { return { vx: 0, vyaw: 0, arrived: !!isLast }; }
 
+    // --- heading loop: clamped proportional on the bearing error ---
     var err = wrapPi(Math.atan2(dy, dx) - state.yaw);
     var vyaw = clamp(err * NAV_TURN_GAIN, -state.turnRate, state.turnRate);
-    var vx = 0;
-    if (Math.abs(err) < NAV_ALIGN) {
-      // linear interpolation of speed: 0 on the waypoint, full when far off
-      var ease = clamp(dist / NAV_SLOW_R, 0, 1);
-      var vFull = state.maxSpeed * BASE_SPEED * (1 - 0.55 * Math.abs(err) / NAV_ALIGN);
-      vx = lerp(0, vFull, ease);
-    }
+
+    // --- speed loop: PID on the distance error ---
+    P.integral += error * dt;
+    P.integral = clamp(P.integral, -P.iClamp, P.iClamp);
+    var derivative = (error - P.lastError) / dt;
+    P.lastError = error;
+
+    var vCmd = P.kp * error + P.ki * P.integral + P.kd * derivative;
+    var vMax = state.maxSpeed * BASE_SPEED;
+    var vx = clamp(vCmd, 0, vMax);
+
+    // never drive while badly misaligned: the heading loop turns in place first
+    if (Math.abs(err) >= NAV_ALIGN) { vx = 0; }
     return { vx: vx, vyaw: vyaw, arrived: false };
   }
 
@@ -1743,6 +1927,7 @@ html{scroll-behavior:smooth}
      12. SIMULATION STEP
      ------------------------------------------------------------------ */
   function update(dt) {
+    researchStep(dt);                          // research: moving entity + telemetry
     var inp = readInput();
     // Priority model (single source of truth):
     //   manual   : any deliberate deflection past the noise floor (stick OR keys)
@@ -1797,7 +1982,7 @@ html{scroll-behavior:smooth}
       wantVyaw =  inp.nx * state.turnRate;
       state.mode = 'manual';
     } else if (state.nav.active) {
-      var cmd = navCommand();
+      var cmd = navCommand(dt);
       if (cmd.arrived) {
         state.x = state.nav.x; state.y = state.nav.y;
         state.nav.active = false;
@@ -1805,6 +1990,7 @@ html{scroll-behavior:smooth}
         clearPath();
         state.vx = 0; state.vyaw = 0;
         state.mode = 'idle';
+        state.osc.paused = true;              // target reached -> freeze the scope
         log('log_reached', null, 'ok');
         if (state.mission.name === 'RETURNING') {
           setMission('IDLE');
@@ -1873,6 +2059,7 @@ html{scroll-behavior:smooth}
     if (state.collision || state.blocked) { state.flash = Math.max(state.flash, 0.75); }
     state.flash = Math.max(0, state.flash - dt * 2.0);
 
+    oscSample(dt);                            // log velocity + error for the scope
     return finishFrame(dt);
   }
 
@@ -1985,6 +2172,23 @@ html{scroll-behavior:smooth}
       var warn = d < COLLIDE_R;
       var x = w2sX(o.x0), y = w2sY(o.y0);
       var w = (o.x1 - o.x0) * view.s, h = (o.y1 - o.y0) * view.s;
+
+      // ---- costmap inflation layer -------------------------------------
+      // Cost rises toward the footprint: an outer caution band at the planner
+      // corridor width (PATH_CLEAR) and an inner lethal band at COLLIDE_R.
+      // Painted largest-first so the obstacle body leaves two visible rings.
+      ctx.save();
+      var bands = [
+        { m: PATH_CLEAR + 0.35, c: 'rgba(251,191,36,.13)' },   // outer: penalty
+        { m: COLLIDE_R + 0.10,  c: 'rgba(251,146,60,.17)' },   // mid:  high cost
+        { m: COLLIDE_R,         c: 'rgba(248,113,113,.20)' }   // inner: lethal
+      ];
+      for (var bi = 0; bi < bands.length; bi++) {
+        var im = bands[bi].m * view.s;
+        ctx.fillStyle = bands[bi].c;
+        ctx.fillRect(x - im, y - im, w + im * 2, h + im * 2);
+      }
+      ctx.restore();
 
       ctx.save();
       ctx.fillStyle = warn ? 'rgba(248,113,113,.26)' : 'rgba(148,169,196,.15)';
@@ -2382,6 +2586,329 @@ html{scroll-behavior:smooth}
     ctx.restore();
   }
 
+  /* ------------------------------------------------------------------
+     13B. REAL-TIME OSCILLOSCOPE (isolated mini-canvas in the map HUD)
+
+       Samples velocity (m/s) and position error (m) at a fixed 20 Hz into a
+       rolling 24 s window, then plots both traces against their own full
+       scale on a separate canvas, so the main map rendering is untouched.
+       Frozen when a target is reached, cleared/restarted on a new target.
+     ------------------------------------------------------------------ */
+  var OSC_DT = 0.05;                     // 20 Hz sampling
+  var oscCtx = null, oscW = 0, oscH = 0;
+
+  function resetOscilloscope() {
+    var o = state.osc;
+    o.ts.length = 0; o.vel.length = 0; o.err.length = 0;
+    o.t = 0; o.timer = OSC_DT;           // take one sample on the next tick
+    o.paused = false;
+  }
+
+  function oscSample(dt) {
+    var o = state.osc;
+    if (o.paused) { return; }
+    o.t += dt;
+    o.timer += dt;
+    if (o.timer < OSC_DT) { return; }
+    o.timer = 0;
+
+    var err = state.nav.active
+      ? Math.hypot(state.nav.x - state.x, state.nav.y - state.y)
+      : 0;
+    o.ts.push(o.t);
+    o.vel.push(Math.abs(state.vx));
+    o.err.push(err);
+    while (o.ts.length > o.max) { o.ts.shift(); o.vel.shift(); o.err.shift(); }
+  }
+
+  function oscInit() {
+    if (!dom.oscCanvas) { return; }
+    oscCtx = dom.oscCanvas.getContext('2d');
+    oscResize();
+    resetOscilloscope();
+  }
+
+  function oscResize() {
+    if (!dom.oscCanvas || !oscCtx) { return; }
+    var r = dom.oscCanvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(80, Math.round(r.width));
+    var h = Math.max(40, Math.round(r.height));
+    if (w === oscW && h === oscH) { return; }
+    oscW = w; oscH = h;
+    dom.oscCanvas.width = Math.round(w * dpr);
+    dom.oscCanvas.height = Math.round(h * dpr);
+    oscCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function traceScale(arr) {
+    var m = 0;
+    for (var i = 0; i < arr.length; i++) { if (arr[i] > m) { m = arr[i]; } }
+    return m > 0.05 ? m : 0.05;
+  }
+
+  // left-aligned trace inside a fixed-size window: it grows from the left and
+  // then scrolls once the ring buffer is full
+  function drawTrace(arr, windowSize, yMax, color) {
+    var n = Math.min(arr.length, windowSize);
+    if (n < 2) { return; }
+    var io = arr.length - n;
+    var stepX = (oscW - 8) / Math.max(1, windowSize - 1);
+    oscCtx.strokeStyle = color;
+    oscCtx.lineWidth = 1.4;
+    oscCtx.beginPath();
+    for (var i = 0; i < n; i++) {
+      var v = Math.min(arr[io + i], yMax) / yMax;
+      var x = 4 + i * stepX;
+      var y = (oscH - 16) - v * (oscH - 26);
+      if (i === 0) { oscCtx.moveTo(x, y); } else { oscCtx.lineTo(x, y); }
+    }
+    oscCtx.stroke();
+  }
+
+  function drawOscilloscope() {
+    if (!oscCtx) { return; }
+    oscResize();
+
+    var o = state.osc;
+    oscCtx.clearRect(0, 0, oscW, oscH);
+
+    // plot box + vertical grid
+    oscCtx.strokeStyle = 'rgba(27,42,65,.9)';
+    oscCtx.lineWidth = 1;
+    oscCtx.strokeRect(3.5, 3.5, oscW - 7, oscH - 7);
+    oscCtx.beginPath();
+    for (var gx = 1; gx < 4; gx++) {
+      var gxp = 4 + (oscW - 8) * gx / 4;
+      oscCtx.moveTo(gxp, 4); oscCtx.lineTo(gxp, oscH - 4);
+    }
+    oscCtx.strokeStyle = 'rgba(27,42,65,.55)';
+    oscCtx.stroke();
+
+    // velocity (cyan) and position error (amber), each on its own scale
+    drawTrace(o.vel, o.max, Math.max(traceScale(o.vel), 0.2), 'rgba(34,211,238,.95)');
+    drawTrace(o.err, o.max, Math.max(traceScale(o.err), 0.2), 'rgba(251,191,36,.95)');
+
+    var lastV = o.vel.length ? o.vel[o.vel.length - 1] : 0;
+    var lastE = o.err.length ? o.err[o.err.length - 1] : 0;
+    oscCtx.font = '10px ui-monospace,Menlo,Consolas,monospace';
+    oscCtx.textBaseline = 'alphabetic';
+    oscCtx.fillStyle = 'rgba(34,211,238,.95)';
+    oscCtx.fillText('v ' + lastV.toFixed(2) + ' m/s', 8, oscH - 5);
+    oscCtx.fillStyle = 'rgba(251,191,36,.95)';
+    oscCtx.fillText('e ' + lastE.toFixed(2) + ' m', 100, oscH - 5);
+    oscCtx.fillStyle = o.paused ? 'rgba(248,113,113,.9)' : 'rgba(127,150,184,.8)';
+    oscCtx.fillText(o.paused ? 'HOLD' : 'RUN', oscW - 38, oscH - 5);
+  }
+
+  /* ------------------------------------------------------------------
+     13C. RESEARCH LAYER — dynamic obstacle + embedded telemetry
+
+       Isolated from the drive stack: it owns ONE moving entity, ONE
+       crossing heuristic and two plot canvases. It reads `state` and never
+       writes nav / joy / mission. Three single-line hooks connect it:
+         update(dt) -> researchStep(dt)
+         render()   -> drawDynamicObstacle()
+         frame()    -> drawTelemetry()
+     ------------------------------------------------------------------ */
+  var DYN_W = 0.9, DYN_H = 0.9;      // dynamic obstacle footprint (m)
+  var TEL_POINTS = 100;              // rolling window: last 100 samples
+  var TEL_DT = 0.1;                  // 10 Hz telemetry sampling
+  var RESEARCH_COOLDOWN = 1.2;       // s between two logged encounters
+  var telSpeedCtx = null, telClearCtx = null;
+
+  function dynRect() {
+    var d = state.dyn;
+    return {
+      x0: d.x - DYN_W / 2, y0: d.y - DYN_H / 2,
+      x1: d.x + DYN_W / 2, y1: d.y + DYN_H / 2
+    };
+  }
+
+  // constant-speed patrol along X, reflecting at the two limits
+  function updateDynamic(dt) {
+    var d = state.dyn;
+    if (!d.active) { return; }
+    d.x += d.vx * dt;
+    if (d.x >= d.maxX) { d.x = d.maxX; d.vx = -Math.abs(d.vx); }
+    if (d.x <= d.minX) { d.x = d.minX; d.vx = Math.abs(d.vx); }
+  }
+
+  // does the leg the robot is currently driving pass through the moving entity?
+  function legBlockedByDyn() {
+    if (!state.nav.active) { return false; }
+    var pts = state.path.points;
+    var wp = (pts && state.path.index < pts.length)
+      ? pts[state.path.index]
+      : { x: state.nav.x, y: state.nav.y };
+    var dx = wp.x - state.x, dy = wp.y - state.y;
+    var len = Math.hypot(dx, dy);
+    var n = Math.max(2, Math.ceil(len / 0.15));
+    var r = dynRect();
+    for (var i = 0; i <= n; i++) {
+      var t = i / n;
+      if (rectDistance(r, state.x + dx * t, state.y + dy * t) === 0) { return true; }
+    }
+    return false;
+  }
+
+  function researchStep(dt) {
+    var r = state.research;
+    updateDynamic(dt);
+
+    var dMin = nearestObstacle(state.x, state.y);          // static + dynamic
+    var dynMin = rectDistance(dynRect(), state.x, state.y);
+
+    r.minClearance = Math.min(r.minClearance, dMin);
+    r.dynMinClearance = Math.min(r.dynMinClearance, dynMin);
+    r.cooldown = Math.max(0, r.cooldown - dt);
+
+    // (a) the entity sweeps across the leg the robot is driving right now
+    var blockedNow = legBlockedByDyn();
+    var crossing = blockedNow && !r.legBlocked;
+    r.legBlocked = blockedNow;
+
+    // (b) the collision gate refused a move while the entity was inside the
+    //     warning ring and the robot had been moving — i.e. a hard brake
+    r.speedPeak = Math.max(Math.abs(state.vx), r.speedPeak - dt * 1.5);
+    var brakingNow = state.blocked && dynMin < COLLIDE_R && r.speedPeak > 0.30;
+    var hardBrake = brakingNow && !r.wasBraking;      // rising edge only
+    r.wasBraking = brakingNow;
+
+    if (r.cooldown <= 0 && (crossing || hardBrake)) {
+      r.cooldown = RESEARCH_COOLDOWN;
+      r.encounters++;
+      log('[RESEARCH] Dynamic obstacle crossing detected. Local avoidance triggered.', null, 'warn');
+    }
+
+    // rolling telemetry window (10 Hz, last TEL_POINTS samples)
+    r.telTimer += dt;
+    if (r.telTimer >= TEL_DT) {
+      r.telTimer = 0;
+      r.speed.push(Math.abs(state.vx));
+      r.clear.push(isFinite(dMin) ? dMin : 20);
+      while (r.speed.length > TEL_POINTS) { r.speed.shift(); r.clear.shift(); }
+      r.samples++;
+    }
+  }
+
+  function drawDynamicObstacle() {
+    if (!ctx) { return; }
+    var d = state.dyn;
+    var x = w2sX(d.x - DYN_W / 2), y = w2sY(d.y - DYN_H / 2);
+    var w = DYN_W * view.s, h = DYN_H * view.s;
+
+    ctx.save();
+    // patrol guide
+    ctx.setLineDash([4, 6]);
+    ctx.strokeStyle = 'rgba(167,139,250,.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(w2sX(d.minX), w2sY(d.y));
+    ctx.lineTo(w2sX(d.maxX), w2sY(d.y));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // purple square body
+    ctx.fillStyle = 'rgba(167,139,250,.42)';
+    ctx.strokeStyle = 'rgba(232,121,249,.95)';
+    ctx.lineWidth = 1.6;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+
+    // heading chevron (shows the constant-speed direction)
+    var cx = w2sX(d.x), cy = w2sY(d.y), sgn = d.vx >= 0 ? 1 : -1;
+    ctx.fillStyle = 'rgba(240,171,252,.95)';
+    ctx.beginPath();
+    ctx.moveTo(cx + sgn * w * 0.22, cy);
+    ctx.lineTo(cx - sgn * w * 0.12, cy - h * 0.18);
+    ctx.lineTo(cx - sgn * w * 0.12, cy + h * 0.18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* ---- telemetry plots (two isolated canvases, 100-point window) ---- */
+  function telPrep(cv, c) {
+    var r = cv.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(60, Math.round(r.width));
+    var h = Math.max(30, Math.round(r.height));
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+    }
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: w, h: h };
+  }
+
+  function telPlot(c, dim, arr, color, unit, floorMax) {
+    var w = dim.w, h = dim.h, i;
+    c.clearRect(0, 0, w, h);
+
+    // frame + horizontal gridlines
+    c.strokeStyle = 'rgba(27,42,65,.9)';
+    c.lineWidth = 1;
+    c.strokeRect(3.5, 3.5, w - 7, h - 7);
+    c.beginPath();
+    for (i = 1; i < 4; i++) {
+      var gy = Math.round(4 + (h - 8) * i / 4) + 0.5;
+      c.moveTo(4, gy); c.lineTo(w - 4, gy);
+    }
+    c.strokeStyle = 'rgba(27,42,65,.5)';
+    c.stroke();
+
+    // auto-scale with a sensible floor so a quiet trace stays readable
+    var maxV = floorMax;
+    for (i = 0; i < arr.length; i++) { if (arr[i] > maxV) { maxV = arr[i]; } }
+
+    var n = arr.length;
+    if (n >= 2) {
+      var stepX = (w - 8) / (TEL_POINTS - 1);
+      c.strokeStyle = color;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      for (i = 0; i < n; i++) {
+        var v = Math.min(arr[i], maxV) / maxV;
+        var px = w - 4 - (n - 1 - i) * stepX;      // newest sample at the right
+        var py = (h - 14) - v * (h - 24);
+        if (i === 0) { c.moveTo(px, py); } else { c.lineTo(px, py); }
+      }
+      c.stroke();
+    }
+
+    var cur = n ? arr[n - 1] : 0;
+    c.font = '10px ui-monospace,Menlo,Consolas,monospace';
+    c.textBaseline = 'alphabetic';
+    c.fillStyle = color;
+    c.fillText(cur.toFixed(2) + ' ' + unit, 7, h - 5);
+    c.fillStyle = 'rgba(127,150,184,.8)';
+    c.fillText('max ' + maxV.toFixed(2), Math.max(7, w - 66), h - 5);
+  }
+
+  function drawTelemetry() {
+    var r = state.research;
+
+    if (dom.telemetrySpeed && !telSpeedCtx) { telSpeedCtx = dom.telemetrySpeed.getContext('2d'); }
+    if (dom.telemetryClearance && !telClearCtx) { telClearCtx = dom.telemetryClearance.getContext('2d'); }
+
+    if (telSpeedCtx) {
+      telPlot(telSpeedCtx, telPrep(dom.telemetrySpeed, telSpeedCtx), r.speed,
+              'rgba(34,211,238,.95)', 'm/s', 0.5);
+    }
+    if (telClearCtx) {
+      telPlot(telClearCtx, telPrep(dom.telemetryClearance, telClearCtx), r.clear,
+              'rgba(251,191,36,.95)', 'm', 1.0);
+    }
+
+    if (dom.researchMetrics) {
+      var minC = isFinite(r.minClearance) ? r.minClearance : 0;
+      var txt = 'Dynamic Encounters: ' + r.encounters +
+                ' · Min Clearance: ' + minC.toFixed(2) + ' m';
+      if (txt !== r.lastMetrics) { r.lastMetrics = txt; dom.researchMetrics.textContent = txt; }
+    }
+  }
+
   function render(now) {
     if (!ctx) { return; }
     resizeCanvas();
@@ -2397,12 +2924,14 @@ html{scroll-behavior:smooth}
     if (state.showGrid) { drawGrid(); }
     drawArena();
     drawObstacles();
+    drawDynamicObstacle();
     if (state.showTrail) { drawTrail(); }
     if (state.showLidar) { drawLidar(cx, cy); }
     if (state.showCam) { drawCameraFOV(cx, cy); }
     if (state.nav.active) { drawPath(cx, cy); drawTarget(cx, cy, now); }
     if (state.mission.name === 'CLEARING') { drawClearTarget(); }
     drawRobot(cx, cy, now);
+    drawOscilloscope();
   }
 
   /* ------------------------------------------------------------------
@@ -2775,6 +3304,9 @@ html{scroll-behavior:smooth}
     dom.rRange.value = String(state.lidar.range);
     dom.rFov.value = String(state.cam.fov);
     dom.rDead.value = String(Math.round(state.dead * 100));
+    dom.rKp.value = String(state.pid.kp);
+    dom.rKi.value = String(state.pid.ki);
+    dom.rKd.value = String(state.pid.kd);
     dom.cGrid.checked = state.showGrid;
     dom.cTrail.checked = state.showTrail;
     dom.cLidar.checked = state.showLidar;
@@ -2789,6 +3321,9 @@ html{scroll-behavior:smooth}
     if (dom.vRange) { dom.vRange.textContent = state.lidar.range.toFixed(1) + ' m'; }
     if (dom.vFov) { dom.vFov.textContent = Math.round(state.cam.fov) + '°'; }
     if (dom.vDead) { dom.vDead.textContent = Math.round(state.dead * 100) + '%'; }
+    if (dom.vKp) { dom.vKp.textContent = state.pid.kp.toFixed(2); }
+    if (dom.vKi) { dom.vKi.textContent = state.pid.ki.toFixed(2); }
+    if (dom.vKd) { dom.vKd.textContent = state.pid.kd.toFixed(2); }
   }
 
   function logParam(name, value) {
@@ -2823,6 +3358,26 @@ html{scroll-behavior:smooth}
       state.dead = clamp(parseInt(this.value, 10) / 100, 0, 0.6); refreshParamLabels();
     });
     dom.rDead.addEventListener('change', function () { logParam('dead', Math.round(state.dead * 100) + '%'); });
+
+    // PID gains: the integral is dropped whenever a gain changes, so tuning
+    // never inherits a stale wind-up term
+    dom.rKp.addEventListener('input', function () {
+      state.pid.kp = clamp(parseFloat(this.value), 0, 3);
+      state.pid.integral = 0; state.pid.lastError = 0; refreshParamLabels();
+    });
+    dom.rKp.addEventListener('change', function () { logParam('Kp', state.pid.kp.toFixed(2)); });
+
+    dom.rKi.addEventListener('input', function () {
+      state.pid.ki = clamp(parseFloat(this.value), 0, 1);
+      state.pid.integral = 0; refreshParamLabels();
+    });
+    dom.rKi.addEventListener('change', function () { logParam('Ki', state.pid.ki.toFixed(2)); });
+
+    dom.rKd.addEventListener('input', function () {
+      state.pid.kd = clamp(parseFloat(this.value), 0, 1);
+      state.pid.lastError = 0; refreshParamLabels();
+    });
+    dom.rKd.addEventListener('change', function () { logParam('Kd', state.pid.kd.toFixed(2)); });
 
     dom.cGrid.addEventListener('change', function () { state.showGrid = this.checked; });
     dom.cTrail.addEventListener('change', function () {
@@ -2926,6 +3481,7 @@ html{scroll-behavior:smooth}
 
     update(dt);
     render(now / 1000);
+    drawTelemetry();
     updateHud(dt, false);
 
     fpsAcc += dt; fpsFrames++; fpsTimer += dt;
@@ -2946,6 +3502,7 @@ html{scroll-behavior:smooth}
     }
     ctx = dom.canvas.getContext('2d');
     resizeCanvas();
+    oscInit();
 
     // ---- input ----
     dom.joyBase.addEventListener('pointerdown', onJoyDown);
@@ -3082,6 +3639,21 @@ html{scroll-behavior:smooth}
   var arc = null, arcLen = 0;          // the same polyline in pixels + its length
   var solved = false, failed = false, exploring = false;
   var explored = 0, wallHits = 0;
+
+  /* ---- benchmarking state: metrics + step log + optional Dijkstra run ---- */
+  var bench = {
+    t0: 0,                 // performance.now() at reset()
+    ms: 0,                 // frozen A* wall-clock time once the search ends
+    done: false,           // A* reached solved / failed
+    csv: [],               // A* step-by-step rows
+    dijkstra: false,       // "Compare Dijkstra" toggle
+    dij: null,             // full Dijkstra reference run (order + totals)
+    dijCsv: []             // Dijkstra step-by-step rows
+  };
+  var compareEl = null, startEl = null, exportEl = null;
+  var masNodesEl = null, masLenEl = null, masMsEl = null, masRevEl = null,
+      mdijNodesEl = null, mdijLenEl = null, mdijMsEl = null, mdijRevEl = null,
+      mEffEl = null, thDijEl = null;
 
   var syncInfo = { note: 'source: default corners', walls: 0, hasTarget: false };
 
@@ -3264,6 +3836,14 @@ html{scroll-behavior:smooth}
     path = null; smoothed = null; arc = null; arcLen = 0;
     solved = false; failed = false; exploring = true;
     explored = 0; wallHits = 0;
+
+    // benchmark: fresh metric window; the Dijkstra reference (if armed) runs
+    // to completion immediately on its own frozen copy of the grid
+    bench.t0 = performance.now();
+    bench.ms = 0; bench.done = false;
+    bench.csv = []; bench.dijCsv = []; bench.dij = null;
+    if (bench.dijkstra) { bench.dij = dijkstraRun(); }
+
     runNo++;
     termRule('run #' + runNo);
     termLine('> Init A* ....... grid ' + N + 'x' + N, 'info');
@@ -3271,6 +3851,10 @@ html{scroll-behavior:smooth}
     termLine('> walls: ' + syncInfo.walls + ' cells projected from the main map', 'dim');
     termLine('> start (' + START.x + ',' + START.y + ')   goal (' + GOAL.x + ',' + GOAL.y + ')', 'dim');
     termLine('> heuristic Euclidean   f = g + h', 'dim');
+    if (bench.dijkstra && bench.dij) {
+      termLine('> Dijkstra reference: ' + bench.dij.explored + ' nodes in ' +
+               bench.dij.ms.toFixed(2) + ' ms  (frozen grid copy)', 'dim');
+    }
   }
 
   // Euclidean (straight-line) heuristic. Admissible for the 8-neighbourhood
@@ -3289,12 +3873,192 @@ html{scroll-behavior:smooth}
   // gScore / H are floats now, so pad() (built for ints) would print 1.4142135…
   function fmt(v) { return (Math.round(v * 100) / 100).toFixed(2); }
 
+  /* ==================================================================
+     BENCHMARK ENGINE — simplified Dijkstra reference on a frozen copy
+     of the grid. Runs instantly (225 cells max); the canvas reveals its
+     expansion order in lockstep with A* so the two frontiers are
+     directly comparable, while the table reports honest totals.
+     ================================================================== */
+  function dijIsWall(s, x, y) { return s.walls[x + ',' + y] === true; }
+
+  function dijkstraRun() {
+    var s = {
+      walls: {}, open: [{ x: START.x, y: START.y }], closed: {}, came: {}, g: {},
+      order: [], explored: 0, done: false, failed: false, path: null, cost: 0, ms: 0
+    };
+    for (var k in wallSet) { if (wallSet[k]) { s.walls[k] = true; } }   // hidden copy
+
+    bench.dijCsv = [];
+    var t0 = performance.now();
+    s.g[START.x + ',' + START.y] = 0;
+
+    while (s.open.length > 0 && !s.done) {
+      var bi = 0, bf = Infinity, i;
+      for (i = 0; i < s.open.length; i++) {
+        var qk = s.open[i].x + ',' + s.open[i].y;
+        if (s.g[qk] < bf) { bf = s.g[qk]; bi = i; }
+      }
+      var cur = s.open.splice(bi, 1)[0];
+      var ck = cur.x + ',' + cur.y;
+      s.closed[ck] = true;
+      s.explored++;
+      s.order.push({ x: cur.x, y: cur.y });
+      bench.dijCsv.push([s.explored, cur.x, cur.y, fmt(s.g[ck]), '', '',
+                         (performance.now() - t0).toFixed(3)]);
+
+      if (cur.x === GOAL.x && cur.y === GOAL.y) {
+        var p = [], key = ck, parts;
+        while (key) {
+          parts = key.split(',');
+          p.push({ x: parseInt(parts[0], 10), y: parseInt(parts[1], 10) });
+          key = s.came[key];
+        }
+        p.reverse();
+        s.path = p; s.cost = s.g[ck]; s.done = true;
+        break;
+      }
+
+      for (i = 0; i < DIRS8.length; i++) {
+        var ddx = DIRS8[i][0], ddy = DIRS8[i][1], stepCost = DIRS8[i][2];
+        var nx = cur.x + ddx, ny = cur.y + ddy;
+        if (nx < 0 || ny < 0 || nx >= N || ny >= N) { continue; }
+        if (ddx !== 0 && ddy !== 0 &&
+            (dijIsWall(s, cur.x + ddx, cur.y) || dijIsWall(s, cur.x, cur.y + ddy))) { continue; }
+        if (dijIsWall(s, nx, ny)) { continue; }
+        var nk = nx + ',' + ny;
+        if (s.closed[nk]) { continue; }
+        var tentative = s.g[ck] + stepCost;
+        if (s.g[nk] === undefined || tentative < s.g[nk]) {
+          s.came[nk] = ck;
+          s.g[nk] = tentative;
+          if (!s.open.some(function (q) { return q.x === nx && q.y === ny; })) {
+            s.open.push({ x: nx, y: ny });
+          }
+        }
+      }
+    }
+    if (!s.done) { s.failed = true; }
+    s.ms = performance.now() - t0;
+    return s;
+  }
+
+  /* ---- live metrics + export ---- */
+  function bestOpenG() {
+    var m = null, i, g;
+    for (i = 0; i < openList.length; i++) {
+      g = gScore[openList[i].x + ',' + openList[i].y];
+      if (g === undefined) { continue; }
+      if (m === null || g < m) { m = g; }
+    }
+    return m;
+  }
+
+  function astPathLen() {
+    if (solved && path) {
+      return fmt(gScore[GOAL.x + ',' + GOAL.y]) + ' m · ' + (path.length - 1) + ' steps';
+    }
+    var g = bestOpenG();
+    if (g === null) { return '—'; }
+    return '≥ ' + fmt(g) + ' m';
+  }
+
+  function benchEfficiency() {
+    if (!bench.dij || !bench.dij.explored || !explored) { return null; }
+    return (1 - explored / bench.dij.explored) * 100;
+  }
+
+  function updateBenchTable() {
+    var live = bench.t0 ? (performance.now() - bench.t0) : 0;
+    var d = bench.dijkstra ? bench.dij : null;
+
+    if (masNodesEl) { masNodesEl.textContent = String(explored); }
+    if (masLenEl) { masLenEl.textContent = astPathLen(); }
+    if (masMsEl) { masMsEl.textContent = (bench.done ? bench.ms : live).toFixed(1); }
+    if (masRevEl) { masRevEl.textContent = String(explored); }
+
+    if (thDijEl) { thDijEl.style.opacity = bench.dijkstra ? '1' : '.35'; }
+    if (mdijNodesEl) { mdijNodesEl.textContent = d ? String(d.explored) : '–'; }
+    if (mdijLenEl) {
+      mdijLenEl.textContent = !d ? '–'
+        : (d.failed || !d.path) ? 'no path'
+        : fmt(d.cost) + ' m · ' + (d.path.length - 1) + ' steps';
+    }
+    if (mdijMsEl) { mdijMsEl.textContent = d ? d.ms.toFixed(2) : '–'; }
+    if (mdijRevEl) {
+      mdijRevEl.textContent = d ? (Math.min(d.order.length, explored) + ' / ' + d.order.length) : '–';
+    }
+
+    if (mEffEl) {
+      if (!d) { mEffEl.textContent = '– (enable Compare Dijkstra)'; }
+      else if (!bench.done) { mEffEl.textContent = '… running'; }
+      else {
+        var g = benchEfficiency();
+        mEffEl.textContent = (g === null) ? '–'
+          : (g >= 0
+              ? 'A* ' + explored + ' vs Dijkstra ' + d.explored + ' → improved by ' + g.toFixed(1) + '%'
+              : 'A* ' + explored + ' vs Dijkstra ' + d.explored + ' → worse by ' + (-g).toFixed(1) + '%');
+      }
+    }
+  }
+
+  function logBenchmark() {
+    if (!bench.dijkstra || !bench.dij) { return; }
+    var g = benchEfficiency();
+    if (g === null) { return; }
+    if (g >= 0) {
+      termLine('> A* Expanded: ' + explored + ' nodes, Dijkstra Expanded: ' + bench.dij.explored +
+               ' nodes. Efficiency improved by ' + g.toFixed(1) + '%.', 'ok');
+    } else {
+      termLine('> A* Expanded: ' + explored + ' nodes, Dijkstra Expanded: ' + bench.dij.explored +
+               ' nodes. Efficiency delta ' + g.toFixed(1) + '% (Dijkstra expanded fewer).', 'warn');
+    }
+  }
+
+  function exportCsv() {
+    var lines = [], i;
+    lines.push('# A* / Dijkstra benchmark export');
+    lines.push('# generated,' + new Date().toISOString());
+    lines.push('# grid,' + N + 'x' + N + ',walls,' + syncInfo.walls);
+    lines.push('# start,' + START.x + ',' + START.y + ',goal,' + GOAL.x + ',' + GOAL.y);
+    lines.push('algorithm,step,node_x,node_y,g,f,h,elapsed_ms');
+    for (i = 0; i < bench.csv.length; i++) { lines.push('A*,' + bench.csv[i].join(',')); }
+    for (i = 0; i < bench.dijCsv.length; i++) { lines.push('Dijkstra,' + bench.dijCsv[i].join(',')); }
+
+    lines.push('');
+    lines.push('metric,value');
+    lines.push('a_star_expanded,' + explored);
+    lines.push('a_star_solved,' + (solved ? 'yes' : (failed ? 'no' : 'running')));
+    lines.push('a_star_path_cost,' + (solved && path ? fmt(gScore[GOAL.x + ',' + GOAL.y]) : ''));
+    lines.push('a_star_path_steps,' + (path ? path.length - 1 : ''));
+    lines.push('a_star_time_ms,' + (bench.done ? bench.ms : (bench.t0 ? performance.now() - bench.t0 : 0)).toFixed(3));
+    lines.push('dijkstra_expanded,' + (bench.dij ? bench.dij.explored : ''));
+    lines.push('dijkstra_path_cost,' + (bench.dij && bench.dij.path ? fmt(bench.dij.cost) : ''));
+    lines.push('dijkstra_time_ms,' + (bench.dij ? bench.dij.ms.toFixed(3) : ''));
+    var eff = benchEfficiency();
+    lines.push('efficiency_gain_pct,' + (eff === null ? '' : eff.toFixed(2)));
+
+    var blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'astar_benchmark_' + Date.now() + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    termLine('> CSV export: ' + (bench.csv.length + bench.dijCsv.length) + ' data rows.', 'ok');
+  }
+
   function step() {
     if (!exploring) { return; }
     if (openList.length === 0) {
       exploring = false; failed = true;
       termLine('> Frontier empty — no path exists.', 'warn');
       termLine('> Aborting search.', 'warn');
+      bench.done = true;
+      bench.ms = performance.now() - bench.t0;
+      logBenchmark();
+      updateBenchTable();
       stopStepping();
       return;
     }
@@ -3312,6 +4076,11 @@ html{scroll-behavior:smooth}
     termLine('> Opening node (' + pad(cur.x) + ',' + pad(cur.y) + ') | F=' + fmt(bf) +
              ' G=' + fmt(gScore[ck]) + ' H=' + fmt(dist(cur.x, cur.y)), 'info');
 
+    // step-by-step record for the CSV export
+    bench.csv.push([explored, cur.x, cur.y, fmt(gScore[ck]), fmt(bf),
+                    fmt(dist(cur.x, cur.y)),
+                    (performance.now() - bench.t0).toFixed(3)]);
+
     if (cur.x === GOAL.x && cur.y === GOAL.y) {
       var p = [], key = ck, parts;
       while (key) {
@@ -3328,6 +4097,10 @@ html{scroll-behavior:smooth}
       termLine('  cost=' + fmt(gScore[ck]) + '   nodes=' + explored +
                '   spline=' + smoothed.length + ' pts', 'ok');
       termLine('> Differential-drive arc ready. Close & reopen to replay.', 'ok');
+      bench.done = true;
+      bench.ms = performance.now() - bench.t0;
+      logBenchmark();
+      updateBenchTable();
       stopStepping();
       return;
     }
@@ -3484,8 +4257,25 @@ html{scroll-behavior:smooth}
         ctx.rect(ox + x * cell + 1, oy + y * cell + 1, cell - 2, cell - 2);
       }
     }
-    ctx.fillStyle = 'rgba(23,42,92,.85)';
+    ctx.fillStyle = bench.dijkstra ? 'rgba(34,211,238,.55)' : 'rgba(23,42,92,.85)';
     ctx.fill();
+
+    // ---- Dijkstra expansion overlay (magenta) --------------------------
+    // Revealed in lockstep with A*: after A* has expanded k nodes we show the
+    // first k cells of Dijkstra's (already computed) expansion order, so the
+    // two frontiers are compared at equal expansion budget.
+    if (bench.dijkstra && bench.dij && bench.dij.order.length) {
+      var reveal = Math.min(bench.dij.order.length, explored);
+      ctx.beginPath();
+      for (i = 0; i < reveal; i++) {
+        var dc = bench.dij.order[i];
+        if (isWall(dc.x, dc.y)) { continue; }
+        ctx.rect(ox + dc.x * cell + cell * 0.30, oy + dc.y * cell + cell * 0.30,
+                 cell * 0.40, cell * 0.40);
+      }
+      ctx.fillStyle = 'rgba(232,121,249,.85)';
+      ctx.fill();
+    }
 
     // obstacles projected from the main map
     ctx.beginPath();
@@ -3599,6 +4389,8 @@ html{scroll-behavior:smooth}
       ctx.stroke();
     }
     ctx.restore();
+
+    updateBenchTable();
 
     if (statusEl) {
       if (failed) { statusEl.textContent = '无解 No path found'; }
@@ -3722,12 +4514,44 @@ html{scroll-behavior:smooth}
     closeBtn = document.getElementById('algoClose');
     statusEl = document.getElementById('algoStatus');
     termEl   = document.getElementById('algoTerm');
+
+    // benchmark panel refs (all optional: the modal works without them)
+    compareEl   = document.getElementById('algoCompare');
+    startEl     = document.getElementById('algoStart');
+    exportEl    = document.getElementById('algoExport');
+    masNodesEl  = document.getElementById('algoMAstNodes');
+    masLenEl    = document.getElementById('algoMAstLen');
+    masMsEl     = document.getElementById('algoMAstMs');
+    masRevEl    = document.getElementById('algoMAstRev');
+    mdijNodesEl = document.getElementById('algoMDijNodes');
+    mdijLenEl   = document.getElementById('algoMDijLen');
+    mdijMsEl    = document.getElementById('algoMDijMs');
+    mdijRevEl   = document.getElementById('algoMDijRev');
+    mEffEl      = document.getElementById('algoMEff');
+    thDijEl     = document.getElementById('algoThDij');
+
     if (!modal || !canvas || !openBtn || !closeBtn) { return; }
     ctx = canvas.getContext('2d');
     if (!ctx) { return; }
 
     openBtn.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);
+
+    if (compareEl) {
+      compareEl.checked = bench.dijkstra;
+      compareEl.addEventListener('change', function () {
+        bench.dijkstra = !!this.checked;
+        termLine(bench.dijkstra
+          ? '> [BENCH] Compare Dijkstra armed — press Start to run the pair.'
+          : '> [BENCH] Dijkstra comparison off.', 'dim');
+      });
+    }
+    if (startEl) {
+      startEl.addEventListener('click', function () {
+        rerun('> [BENCH] Start — re-running on the current grid...');
+      });
+    }
+    if (exportEl) { exportEl.addEventListener('click', exportCsv); }
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && modal.classList.contains('open')) { closeModal(); }
     });
@@ -3748,6 +4572,407 @@ html{scroll-behavior:smooth}
     document.addEventListener('DOMContentLoaded', ready);
   } else {
     ready();
+  }
+})();
+</script>
+<script>
+/* =====================================================================
+   ADVANCED CONTROL & PERCEPTION — isolated research module
+   ---------------------------------------------------------------------
+   SAFETY CONTRACT
+     * Never writes state.x / state.y / state.yaw (main physics stays
+       untouched). It only READS the live pose through window.__teleop.
+     * Everything it owns lives in the private `S` object below.
+     * The PID gains it edits are the dedicated control namespace
+       `state.pid` — the same isolated object navCommand() consumes, so
+       the control layer has exactly one source of truth.
+     * Renders into its OWN canvases plus a pointer-events:none overlay,
+       so the main renderer is never disturbed.
+
+   LAYERS
+     control    : discrete PID (already inside navCommand) + tuning panel
+     perception : gaussian measurement noise + complementary filter
+     viz        : #pidCanvas, #filterCanvas, #perceptionOverlay
+   ===================================================================== */
+(function () {
+  'use strict';
+
+  var ARENA_HX = 9.0, ARENA_HY = 5.75, PAD = 0.7;
+  var TEL_N = 100;                 // rolling window: last 100 samples
+  var TEL_DT = 0.1;                // 10 Hz sampling
+
+  /* ---- isolated perception state (no collision with the state machine) ---- */
+  var S = {
+    sigma: 0.15,                   // measurement noise sigma (m), slider 0..1
+    alpha: 0.80,                   // complementary filter weight, slider 0.5..1
+    estX: 0, measX: 0, ready: false,
+    lastT: 0, timer: 0,
+    vel: [], eMeas: [], eEst: []   // rolling windows
+  };
+
+  var PRESETS = [
+    { label: 'preset: default (Kp1.5 Ki0.1 Kd0.2)', kp: 1.50, ki: 0.10, kd: 0.20 },
+    { label: 'preset: extreme overshoot',           kp: 2.80, ki: 0.60, kd: 0.00 },
+    { label: 'preset: overdamped',                  kp: 0.80, ki: 0.02, kd: 0.90 }
+  ];
+  var presetIdx = 0;
+
+  var el = {};
+  var ovCtx = null, pidCtx = null, filtCtx = null;
+
+  /* ---- host bridge (read-only) ---- */
+  function hostState() {
+    var T = window.__teleop;
+    return (T && T.state) ? T.state : null;
+  }
+
+  function gauss() {
+    var u = 0, v = 0;
+    while (u === 0) { u = Math.random(); }
+    while (v === 0) { v = Math.random(); }
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+
+  /* ==================================================================
+     SAMPLE — noise model + complementary filter
+       measuredX = truthX + gaussian() * noiseLevel
+       estX      = alpha * (estX + v*dt) + (1 - alpha) * measuredX
+     ================================================================== */
+  function sample() {
+    var st = hostState();
+    if (!st) { return; }
+
+    var now = performance.now();
+    var dt = S.lastT ? Math.min((now - S.lastT) / 1000, 0.1) : 0.016;
+    S.lastT = now;
+
+    var truthX = (typeof st.x === 'number') ? st.x : 0;
+    var v      = (typeof st.vx === 'number') ? st.vx : 0;
+
+    if (!S.ready) { S.estX = truthX; S.measX = truthX; S.ready = true; }
+
+    // --- measurement (noisy sensor) ---
+    S.measX = truthX + gauss() * S.sigma;
+
+    // --- complementary filter: model prediction corrected by the measurement ---
+    var predicted = S.estX + v * dt;
+    S.estX = S.alpha * predicted + (1 - S.alpha) * S.measX;
+
+    // --- 10 Hz rolling windows ---
+    S.timer += dt;
+    if (S.timer < TEL_DT) { return; }
+    S.timer = 0;
+    S.vel.push(v);
+    S.eMeas.push(Math.abs(S.measX - truthX));
+    S.eEst.push(Math.abs(S.estX - truthX));
+    while (S.vel.length > TEL_N) { S.vel.shift(); S.eMeas.shift(); S.eEst.shift(); }
+  }
+
+  /* ==================================================================
+     PLOT HELPERS
+     ================================================================== */
+  function prep(cv, ctx) {
+    var r = cv.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(60, Math.round(r.width));
+    var h = Math.max(30, Math.round(r.height));
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: w, h: h };
+  }
+
+  function grid(ctx, w, h, zeroLine) {
+    ctx.strokeStyle = 'rgba(27,42,65,.9)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(3.5, 3.5, w - 7, h - 7);
+    ctx.beginPath();
+    for (var i = 1; i < 4; i++) {
+      var gy = Math.round(4 + (h - 8) * i / 4) + 0.5;
+      ctx.moveTo(4, gy); ctx.lineTo(w - 4, gy);
+    }
+    ctx.strokeStyle = 'rgba(27,42,65,.5)';
+    ctx.stroke();
+    if (zeroLine) {
+      ctx.beginPath();
+      ctx.moveTo(4, zeroLine + 0.5); ctx.lineTo(w - 4, zeroLine + 0.5);
+      ctx.strokeStyle = 'rgba(127,150,184,.45)';
+      ctx.stroke();
+    }
+  }
+
+  function caption(ctx, h, w, left, right, color) {
+    ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = color;
+    ctx.fillText(left, 7, h - 5);
+    ctx.fillStyle = 'rgba(127,150,184,.8)';
+    ctx.fillText(right, Math.max(7, w - 74), h - 5);
+  }
+
+  /* ==================================================================
+     CONTROL LAYER PLOT — signed linear velocity, 100 samples
+     ================================================================== */
+  function drawPid() {
+    if (!pidCtx || !el.pidCanvas) { return; }
+    var d = prep(el.pidCanvas, pidCtx), w = d.w, h = d.h, i;
+    var arr = S.vel;
+
+    pidCtx.clearRect(0, 0, w, h);
+
+    var scale = 0.5;
+    for (i = 0; i < arr.length; i++) { scale = Math.max(scale, Math.abs(arr[i])); }
+    var mid = (h - 14) / 2 + 4;
+    var half = (h - 22) / 2;
+
+    grid(pidCtx, w, h, mid);
+
+    var n = arr.length;
+    if (n >= 2) {
+      var stepX = (w - 8) / (TEL_N - 1);
+      pidCtx.strokeStyle = 'rgba(34,211,238,.95)';
+      pidCtx.lineWidth = 1.5;
+      pidCtx.beginPath();
+      for (i = 0; i < n; i++) {
+        var px = w - 4 - (n - 1 - i) * stepX;
+        var py = mid - clamp(arr[i] / scale, -1, 1) * half;
+        if (i === 0) { pidCtx.moveTo(px, py); } else { pidCtx.lineTo(px, py); }
+      }
+      pidCtx.stroke();
+    }
+
+    var cur = n ? arr[n - 1] : 0;
+    caption(pidCtx, h, w, 'v ' + cur.toFixed(2) + ' m/s', 'max ' + scale.toFixed(2),
+            'rgba(34,211,238,.95)');
+  }
+
+  /* ==================================================================
+     PERCEPTION LAYER PLOT — |measured error| vs |filtered error|
+     ================================================================== */
+  function drawFilter() {
+    if (!filtCtx || !el.filterCanvas) { return; }
+    var d = prep(el.filterCanvas, filtCtx), w = d.w, h = d.h, i;
+    var m = S.eMeas, f = S.eEst;
+
+    filtCtx.clearRect(0, 0, w, h);
+
+    var scale = 0.05;
+    for (i = 0; i < m.length; i++) {
+      if (m[i] > scale) { scale = m[i]; }
+      if (f[i] > scale) { scale = f[i]; }
+    }
+    grid(filtCtx, w, h, 0);
+
+    function trace(arr, color) {
+      var n = arr.length;
+      if (n < 2) { return; }
+      var stepX = (w - 8) / (TEL_N - 1);
+      filtCtx.strokeStyle = color;
+      filtCtx.lineWidth = 1.5;
+      filtCtx.beginPath();
+      for (var k = 0; k < n; k++) {
+        var px = w - 4 - (n - 1 - k) * stepX;
+        var py = (h - 14) - (Math.min(arr[k], scale) / scale) * (h - 24);
+        if (k === 0) { filtCtx.moveTo(px, py); } else { filtCtx.lineTo(px, py); }
+      }
+      filtCtx.stroke();
+    }
+    trace(m, 'rgba(251,191,36,.95)');   // measured (yellow)
+    trace(f, 'rgba(52,211,153,.95)');   // filtered (green)
+
+    var curM = m.length ? m[m.length - 1] : 0;
+    var curF = f.length ? f[f.length - 1] : 0;
+    caption(filtCtx, h, w, 'meas ' + curM.toFixed(2) + ' · filt ' + curF.toFixed(2) + ' m',
+            'max ' + scale.toFixed(2), 'rgba(251,191,36,.95)');
+
+    // running means are the actual research result: filtering must lower them
+    if (el.filterReadout && m.length > 2) {
+      var sm = 0, sf = 0;
+      for (i = 0; i < m.length; i++) { sm += m[i]; sf += f[i]; }
+      sm /= m.length; sf /= f.length;
+      var txt = '|err| meas ' + sm.toFixed(3) + ' m · filt ' + sf.toFixed(3) + ' m';
+      if (txt !== S.lastReadout) { S.lastReadout = txt; el.filterReadout.textContent = txt; }
+    }
+  }
+
+  /* ==================================================================
+     MAP OVERLAY — Red truth · Yellow measured · Green filtered
+     The transform mirrors the host view exactly (same padding + fit),
+     so the markers land on the robot without touching the main renderer.
+     ================================================================== */
+  function drawOverlay() {
+    if (!ovCtx || !el.overlay) { return; }
+    var st = hostState();
+    var d = prep(el.overlay, ovCtx), w = d.w, h = d.h;
+    ovCtx.clearRect(0, 0, w, h);
+    if (!st) { return; }
+
+    var s = Math.max(4, Math.min(w / ((ARENA_HX + PAD) * 2), h / ((ARENA_HY + PAD) * 2)));
+    var cx = w / 2, cy = h / 2;
+    var truthX = (typeof st.x === 'number') ? st.x : 0;
+    var truthY = (typeof st.y === 'number') ? st.y : 0;
+
+    var tx = cx + truthX * s, ty = cy + truthY * s;
+    var mx = cx + S.measX * s,  my = cy + truthY * s;
+    var ex = cx + S.estX * s,   ey = cy + truthY * s;
+
+    // measurement residual (truth -> measured)
+    ovCtx.strokeStyle = 'rgba(251,191,36,.55)';
+    ovCtx.lineWidth = 1;
+    ovCtx.setLineDash([3, 4]);
+    ovCtx.beginPath();
+    ovCtx.moveTo(tx, ty); ovCtx.lineTo(mx, my);
+    ovCtx.stroke();
+    ovCtx.setLineDash([]);
+
+    // yellow: noisy measurement
+    ovCtx.strokeStyle = 'rgba(251,191,36,.95)';
+    ovCtx.lineWidth = 1.6;
+    ovCtx.beginPath(); ovCtx.arc(mx, my, 6.5, 0, Math.PI * 2); ovCtx.stroke();
+
+    // green: complementary filter estimate
+    ovCtx.fillStyle = 'rgba(52,211,153,.95)';
+    ovCtx.beginPath(); ovCtx.arc(ex, ey, 3.4, 0, Math.PI * 2); ovCtx.fill();
+
+    // red: ground truth (always the true pose)
+    ovCtx.fillStyle = 'rgba(248,113,113,.95)';
+    ovCtx.strokeStyle = 'rgba(6,12,20,.9)';
+    ovCtx.lineWidth = 1.2;
+    ovCtx.beginPath(); ovCtx.arc(tx, ty, 4.6, 0, Math.PI * 2); ovCtx.fill(); ovCtx.stroke();
+  }
+
+  /* ==================================================================
+     UI — sliders, preset, and two-way mirror of the drawer controls
+     ================================================================== */
+  function pushPidToCanvasUi() {
+    var st = hostState();
+    if (!st || !st.pid) { return; }
+    var p = st.pid;
+
+    el.pidKp.value = String(p.kp);
+    el.pidKi.value = String(p.ki);
+    el.pidKd.value = String(p.kd);
+    el.pidVKp.textContent = p.kp.toFixed(2);
+    el.pidVKi.textContent = p.ki.toFixed(2);
+    el.pidVKd.textContent = p.kd.toFixed(2);
+
+    // keep the Parameters-drawer trio consistent (both edit the same namespace)
+    var dKp = document.getElementById('rKp'), vKp = document.getElementById('vKp');
+    var dKi = document.getElementById('rKi'), vKi = document.getElementById('vKi');
+    var dKd = document.getElementById('rKd'), vKd = document.getElementById('vKd');
+    if (dKp) { dKp.value = String(p.kp); }
+    if (dKi) { dKi.value = String(p.ki); }
+    if (dKd) { dKd.value = String(p.kd); }
+    if (vKp) { vKp.textContent = p.kp.toFixed(2); }
+    if (vKi) { vKi.textContent = p.ki.toFixed(2); }
+    if (vKd) { vKd.textContent = p.kd.toFixed(2); }
+  }
+
+  function applyPreset(idx) {
+    var st = hostState();
+    if (!st || !st.pid) { return; }
+    var pr = PRESETS[idx % PRESETS.length];
+    presetIdx = idx % PRESETS.length;
+    st.pid.kp = pr.kp; st.pid.ki = pr.ki; st.pid.kd = pr.kd;
+    st.pid.integral = 0; st.pid.lastError = 0;      // no stale wind-up after a tune
+    if (el.pidPreset) { el.pidPreset.textContent = pr.label; }
+    pushPidToCanvasUi();
+  }
+
+  function wire() {
+    el.overlay      = document.getElementById('perceptionOverlay');
+    el.pidCanvas    = document.getElementById('pidCanvas');
+    el.filterCanvas = document.getElementById('filterCanvas');
+    el.pidKp = document.getElementById('pidKp');
+    el.pidKi = document.getElementById('pidKi');
+    el.pidKd = document.getElementById('pidKd');
+    el.pidVKp = document.getElementById('pidVKp');
+    el.pidVKi = document.getElementById('pidVKi');
+    el.pidVKd = document.getElementById('pidVKd');
+    el.pidPreset = document.getElementById('pidPreset');
+    el.pidPresetBtn = document.getElementById('pidPresetBtn');
+    el.filtSigma = document.getElementById('filtSigma');
+    el.filtAlpha = document.getElementById('filtAlpha');
+    el.filtVSigma = document.getElementById('filtVSigma');
+    el.filtVAlpha = document.getElementById('filtVAlpha');
+    el.filterReadout = document.getElementById('filterReadout');
+
+    if (el.overlay) { ovCtx = el.overlay.getContext('2d'); }
+    if (el.pidCanvas) { pidCtx = el.pidCanvas.getContext('2d'); }
+    if (el.filterCanvas) { filtCtx = el.filterCanvas.getContext('2d'); }
+
+    function gainHandler(which) {
+      return function () {
+        var st = hostState();
+        if (!st || !st.pid) { return; }
+        if (which === 'kp') { st.pid.kp = clamp(parseFloat(this.value), 0, 3); st.pid.integral = 0; }
+        if (which === 'ki') { st.pid.ki = clamp(parseFloat(this.value), 0, 1); st.pid.integral = 0; }
+        if (which === 'kd') { st.pid.kd = clamp(parseFloat(this.value), 0, 1); st.pid.lastError = 0; }
+        if (el.pidPreset) { el.pidPreset.textContent = 'preset: custom'; }
+        pushPidToCanvasUi();
+      };
+    }
+    if (el.pidKp) { el.pidKp.addEventListener('input', gainHandler('kp')); }
+    if (el.pidKi) { el.pidKi.addEventListener('input', gainHandler('ki')); }
+    if (el.pidKd) { el.pidKd.addEventListener('input', gainHandler('kd')); }
+
+    if (el.pidPresetBtn) {
+      el.pidPresetBtn.addEventListener('click', function () {
+        applyPreset(presetIdx + 1);
+      });
+    }
+
+    if (el.filtSigma) {
+      el.filtSigma.addEventListener('input', function () {
+        S.sigma = clamp(parseFloat(this.value), 0, 1);
+        el.filtVSigma.textContent = S.sigma.toFixed(2) + ' m';
+      });
+    }
+    if (el.filtAlpha) {
+      el.filtAlpha.addEventListener('input', function () {
+        S.alpha = clamp(parseFloat(this.value), 0.5, 1);
+        el.filtVAlpha.textContent = S.alpha.toFixed(2);
+      });
+    }
+
+    el.filtVSigma.textContent = S.sigma.toFixed(2) + ' m';
+    el.filtVAlpha.textContent = S.alpha.toFixed(2);
+    applyPreset(0);          // seed the canonical PID namespace with the defaults
+  }
+
+  /* ==================================================================
+     LOOP — one rAF callback, fully guarded: a failure here can never
+     break the host page's own animation loop.
+     ================================================================== */
+  function frame() {
+    try {
+      sample();
+      drawPid();
+      drawFilter();
+      drawOverlay();
+    } catch (err) {
+      if (window.console) { window.console.warn('[research] frame failed', err); }
+    }
+    window.requestAnimationFrame(frame);
+  }
+
+  function boot() {
+    try {
+      wire();
+      window.requestAnimationFrame(frame);
+    } catch (err) {
+      if (window.console) { window.console.warn('[research] boot failed', err); }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
   }
 })();
 </script>
