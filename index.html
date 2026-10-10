@@ -557,6 +557,7 @@ html{scroll-behavior:smooth}
   margin-right:5px;vertical-align:middle;
 }
 .algo-status{margin-top:8px;font-family:var(--mono);font-size:11.5px;color:var(--cyan)}
+.algo-note{margin-top:6px;font-family:var(--mono);font-size:10px;color:#3f6b7a;letter-spacing:.04em}
 
 @media (max-width:720px){
   .algo-body{grid-template-columns:1fr}
@@ -850,6 +851,7 @@ html{scroll-behavior:smooth}
         <span><i style="background:#1e3a8a"></i>Closed 已探索</span>
       </div>
       <div class="algo-status" id="algoStatus">…</div>
+      <div class="algo-note">* 视觉映射 | Visual mapping of current navigation state</div>
     </div>
   </div>
 
@@ -2960,42 +2962,40 @@ html{scroll-behavior:smooth}
 })();
 
 /* =====================================================================
-   ALGO DEMO MODAL — self-contained A* visualiser (Batch 3 logic fix).
+   ALGO DEMO MODAL — self-contained A* visualiser + main-map visual sync.
    Own IIFE scope, own canvas (#algoCanvas), own pseudo-terminal.
 
-   FIX: the search state used to be created inside reset(), but openModal()
-   painted the first frame before reset() ran, so the status line read
-   openList.length while openList was still undefined -> TypeError -> the
-   interval / rAF were never armed (modal opened, everything static).
-   State is now initialised up front, reset() runs BEFORE the first paint,
-   and both loops are guarded so no single frame can kill the animation.
+   The grid is generated on every open from the LIVE navigation state
+   (window.__teleop.state): obstacles are projected onto the 15x15 grid,
+   the start node follows the robot and the goal node follows the target.
+   This is a read-only visual mapping — the main physics loop, the joystick
+   and the mission state machine are never touched.
+
+   FIX kept from Batch 3: the search state is created up front and reset()
+   runs BEFORE the first paint, so no frame can ever read an undefined
+   openList, and both loops are guarded + cleared on close.
    ===================================================================== */
 (function () {
   'use strict';
 
   var N = 15;                          // 15 x 15 grid
-  var START = { x: 0, y: 0 };          // top-left
-  var GOAL  = { x: N - 1, y: N - 1 };  // bottom-right
+  var START = { x: 0, y: 0 };          // top-left  (rewritten by syncFromMain)
+  var GOAL  = { x: N - 1, y: N - 1 };  // bottom-right (rewritten by syncFromMain)
   var STEP_MS = 100;                   // one A* expansion + one terminal line per 100 ms
   var TERM_MAX = 70;                   // terminal scrollback
   var TAU = Math.PI * 2;
 
-  // fixed obstacle layout: two staggered walls + decoration (always solvable)
-  var WALLS = (function () {
-    var list = [], y;
-    for (y = 0; y <= 10; y++) { list.push(4 + ',' + y); }   // wall, gap at the bottom
-    for (y = 4; y <= 14; y++) { list.push(9 + ',' + y); }   // wall, gap at the top
-    list.push('6,6'); list.push('7,6'); list.push('6,7'); list.push('7,7');
-    list.push('11,7'); list.push('11,8'); list.push('11,9');
-    return list;
-  })();
-  function isWall(x, y) { return WALLS.indexOf(x + ',' + y) >= 0; }
+  // mirrors the main arena extent, used only to scale world metres -> cells
+  var ARENA_HX = 9.0, ARENA_HY = 5.75;
 
   var modal = null, canvas = null, ctx = null;
   var openBtn = null, closeBtn = null, statusEl = null, termEl = null;
   var cw = 0, ch = 0, cell = 0, ox = 0, oy = 0, dpr = 1;
   var stepTimer = null, rafId = null, clock = 0, clock0 = 0;
   var pulse = 0, travel = 0, runNo = 0;
+
+  // wall set for the current run (rebuilt from the main map on every open)
+  var wallSet = {};
 
   // ---- search state: ALWAYS defined, never undefined during a paint ----
   var openList = [];
@@ -3005,6 +3005,85 @@ html{scroll-behavior:smooth}
   var path = null;
   var solved = false, failed = false, exploring = false;
   var explored = 0, wallHits = 0;
+
+  // what the last sync found (shown in the terminal header)
+  var syncInfo = { note: 'source: default corners', walls: 0, hasTarget: false };
+
+  /* ---------------- main-map visual sync (read-only) ---------------- */
+  function clampInt(v, a, b) { v = Math.round(v); return v < a ? a : (v > b ? b : v); }
+  function wx2gx(wx) { return clampInt((wx + ARENA_HX) / (ARENA_HX * 2) * (N - 1), 0, N - 1); }
+  function wy2gy(wy) { return clampInt((wy + ARENA_HY) / (ARENA_HY * 2) * (N - 1), 0, N - 1); }
+
+  function syncFromMain() {
+    var T = window.__teleop;
+    var st = (T && T.state) ? T.state : null;
+    var cells = [], i, gx, gy, x0, x1, y0, y1, tmp;
+
+    // 1) project every main-map obstacle rectangle onto the 15x15 grid
+    if (st && st.obstacles) {
+      for (i = 0; i < st.obstacles.length; i++) {
+        var o = st.obstacles[i];
+        x0 = wx2gx(o.x0); x1 = wx2gx(o.x1);
+        y0 = wy2gy(o.y0); y1 = wy2gy(o.y1);
+        if (x1 < x0) { tmp = x0; x0 = x1; x1 = tmp; }
+        if (y1 < y0) { tmp = y0; y0 = y1; y1 = tmp; }
+        for (gy = y0; gy <= y1; gy++) {
+          for (gx = x0; gx <= x1; gx++) { cells.push(gx + ',' + gy); }
+        }
+      }
+    }
+
+    // 2) 5-8 small obstacles project to very few cells -> thicken once for legibility
+    var seen = {}, keys = [];
+    for (i = 0; i < cells.length; i++) {
+      if (!seen[cells[i]]) { seen[cells[i]] = true; keys.push(cells[i]); }
+    }
+    if (keys.length > 0 && keys.length < 10) {
+      var NB = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (i = 0; i < keys.length; i++) {
+        var pr = keys[i].split(',');
+        var px = parseInt(pr[0], 10), py = parseInt(pr[1], 10);
+        for (var k = 0; k < NB.length; k++) {
+          var ax = px + NB[k][0], ay = py + NB[k][1];
+          if (ax < 0 || ay < 0 || ax >= N || ay >= N) { continue; }
+          cells.push(ax + ',' + ay);
+        }
+      }
+    }
+
+    // 3) start / goal follow the live navigation state
+    var hasTarget = !!(st && st.nav && st.nav.active);
+    if (hasTarget) {
+      START.x = wx2gx(st.x);     START.y = wy2gy(st.y);
+      GOAL.x  = wx2gx(st.nav.x); GOAL.y  = wy2gy(st.nav.y);
+    } else {
+      START.x = 0; START.y = 0;                 // default corners
+      GOAL.x = N - 1; GOAL.y = N - 1;
+    }
+    if (START.x === GOAL.x && START.y === GOAL.y) {
+      GOAL.x = (GOAL.x + 7) % N;                // never degenerate
+    }
+
+    // 4) commit the wall set, keeping start and goal cells free
+    wallSet = {};
+    for (i = 0; i < cells.length; i++) {
+      var c = cells[i];
+      if (c === (START.x + ',' + START.y)) { continue; }
+      if (c === (GOAL.x + ',' + GOAL.y)) { continue; }
+      wallSet[c] = true;
+    }
+    var n = 0, kk;
+    for (kk in wallSet) { if (wallSet[kk]) { n++; } }
+
+    syncInfo.walls = n;
+    syncInfo.hasTarget = hasTarget;
+    syncInfo.note = hasTarget
+      ? ('source: live nav state  robot (' + START.x + ',' + START.y + ')  target (' + GOAL.x + ',' + GOAL.y + ')')
+      : 'source: no active target — default corners';
+    return syncInfo;
+  }
+
+  function isWall(x, y) { return wallSet[x + ',' + y] === true; }
 
   /* ---------------- pseudo-terminal ---------------- */
   function termLine(text, cls) {
@@ -3023,6 +3102,27 @@ html{scroll-behavior:smooth}
     termLine('\u2500\u2500 ' + tag + ' ' + dashes, 'dim');
   }
   function pad(n) { return (n < 10 ? ' ' : '') + n; }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  // mirror a line into the MAIN page event log (DOM-only, no main JS touched)
+  function mainLog(text) {
+    var list = document.getElementById('logList');
+    if (!list) { return; }
+    var d = new Date();
+    var li = document.createElement('li');
+    li.className = 'log-item';
+    var a = document.createElement('span');
+    a.className = 'log-time';
+    a.textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+    var b = document.createElement('span');
+    b.className = 'log-text log-info';
+    b.textContent = text;
+    li.appendChild(a);
+    li.appendChild(b);
+    list.appendChild(li);
+    while (list.childNodes.length > 90) { list.removeChild(list.firstChild); }
+    list.scrollTop = list.scrollHeight;
+  }
 
   /* ---------------- A* ---------------- */
   function reset() {
@@ -3035,10 +3135,11 @@ html{scroll-behavior:smooth}
     explored = 0; wallHits = 0;
     runNo++;
     termRule('run #' + runNo);
-    termLine('> Init A* ....... grid 15x15', 'info');
-    termLine('> start (0,0)   goal (14,14)', 'dim');
+    termLine('> Init A* ....... grid ' + N + 'x' + N, 'info');
+    termLine('> ' + syncInfo.note, 'dim');
+    termLine('> walls: ' + syncInfo.walls + ' cells projected from the main map', 'dim');
+    termLine('> start (' + START.x + ',' + START.y + ')   goal (' + GOAL.x + ',' + GOAL.y + ')', 'dim');
     termLine('> heuristic Manhattan   f = g + h', 'dim');
-    termLine('> open = [(0,0)]   closed = []', 'dim');
   }
 
   function dist(x, y) { return Math.abs(x - GOAL.x) + Math.abs(y - GOAL.y); }
@@ -3170,7 +3271,7 @@ html{scroll-behavior:smooth}
     ctx.fillStyle = 'rgba(23,42,92,.85)';
     ctx.fill();
 
-    // obstacles (batched, purple)
+    // obstacles (batched, purple) — these are the main map's obstacles
     ctx.beginPath();
     for (y = 0; y < N; y++) {
       for (x = 0; x < N; x++) {
@@ -3236,7 +3337,7 @@ html{scroll-behavior:smooth}
       }
     }
 
-    // start node: neon cyan disc
+    // start node: neon cyan disc (mapped from the robot pose)
     sx = ox + (START.x + 0.5) * cell;
     sy = oy + (START.y + 0.5) * cell;
     ctx.save();
@@ -3249,7 +3350,7 @@ html{scroll-behavior:smooth}
     ctx.beginPath(); ctx.arc(sx, sy, cell * 0.16, 0, TAU); ctx.fill();
     ctx.restore();
 
-    // goal node: magenta crosshair with rotating ticks
+    // goal node: magenta crosshair with rotating ticks (mapped from the target)
     gx = ox + (GOAL.x + 0.5) * cell;
     gy = oy + (GOAL.y + 0.5) * cell;
     ctx.save();
@@ -3325,19 +3426,23 @@ html{scroll-behavior:smooth}
     if (!modal || !canvas || !ctx) { return; }
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
-    reset();          // 1. fresh search state + first terminal lines  (BEFORE any paint)
-    fit();            // 2. size the canvas and paint frame 0
-    startLoops();     // 3. arm the 100 ms stepper + the rAF glow loop
+    syncFromMain();   // 1. project the live navigation state onto the grid
+    reset();          // 2. fresh search state + terminal header
+    fit();            // 3. size the canvas and paint frame 0
+    startLoops();     // 4. auto-play: 100 ms stepper + the rAF glow loop
+    mainLog('> [ALGO] Visualization attached · ' + syncInfo.note);
   }
 
   function closeModal() {
     if (!modal) { return; }
+    var wasOpen = modal.classList.contains('open');
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
     stopStepping();   // clearInterval
     stopRaf();        // cancelAnimationFrame
     exploring = false;
     clock0 = 0;
+    if (wasOpen) { mainLog('> [ALGO] Visualization detached.'); }
   }
 
   /* ---------------- boot ---------------- */
