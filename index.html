@@ -455,6 +455,10 @@ html{scroll-behavior:smooth}
 }
 #about .about-cta:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 
+/* Nested sub-block inside a panel (plugin exploration) */
+#about .sub-block{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line-soft)}
+#about .sub-block .sec-label{margin-bottom:7px}
+
 @media (max-width:1040px){
   #about{padding:40px 18px 34px}
   #about .grid3{grid-template-columns:1fr;gap:12px}
@@ -483,7 +487,7 @@ html{scroll-behavior:smooth}
         <article class="panel sec">
           <div class="sec-label" data-i18n="about_c1_kicker">01</div>
           <h3 class="sec-title" data-i18n="about_c1_title">AI 驾驭与全栈实践</h3>
-          <p class="sec-body" data-i18n="about_c1_body">说实话，这个网页90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。</p>
+          <p class="sec-body" data-i18n="about_c1_body">说实话，这个网页的90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。</p>
         </article>
 
         <article class="panel sec">
@@ -496,6 +500,10 @@ html{scroll-behavior:smooth}
           <div class="sec-label" data-i18n="about_c3_kicker">03</div>
           <h3 class="sec-title" data-i18n="about_c3_title">工程实践与降维打击</h3>
           <p class="sec-body" data-i18n="about_c3_body">真正的工程是一场与现实的搏斗。我遭遇了DSH沙箱写文件报错、平板浏览器内存溢出导致GitHub无法Commit、甚至GitHub被墙。我最终通过“上传文件覆盖”绕过限制，并用无痕模式击穿了缓存。我深刻明白：在极限交付中，稳定的MVP（最小可行性产品）永远优于跑不起来的完美方案。</p>
+          <div class="sub-block">
+            <div class="sec-label" data-i18n="about_c3_sub_label">插件探索</div>
+            <p class="sec-body" data-i18n="about_c3_sub_body">我尝试在安卓 Termux 环境下部署 dsh-synapse（会话地图插件），遭遇了 ARM64 架构下原生模块 require-builtin.node 的编译缺失。这让我意识到移动端部署 AI 环境存在巨大的兼容性壁垒。随后我果断止损，转向标准桌面环境（笔记本）重新梳理 Node.js、pnpm 与 DSH 插件的依赖链路。虽未能完美跑通，但这次失败让我深刻理解了 DSH 的微内核插件机制。从‘使用者’向‘创造者’迈进，我选择从失败中复盘，而非止步于表面。</p>
+          </div>
         </article>
 
       </div>
@@ -899,6 +907,8 @@ html{scroll-behavior:smooth}
       about_c3_kicker: '03',
       about_c3_title: 'Engineering Resilience',
       about_c3_body: 'Real engineering is a fight with reality. I ran into DSH sandbox file-write errors, a tablet browser running out of memory so GitHub could not commit, and even GitHub being blocked. I got past it by uploading files to overwrite, and broke through the cache with incognito mode. What I now understand deeply: for extreme delivery, a stable MVP always beats a perfect solution that will not run.',
+      about_c3_sub_label: 'PLUGIN EXPLORATION',
+      about_c3_sub_body: 'I attempted to deploy the dsh-synapse plugin in an Android Termux environment but encountered a compilation failure of require-builtin.node under ARM64. I pivoted to a desktop environment to re-trace the dependency chain. Although this attempt was incomplete, it taught me the value of resilience and post-mortem analysis in AI engineering.',
       about_cta: 'Enter the console \u2193'
     },
     zh: {
@@ -978,13 +988,15 @@ html{scroll-behavior:smooth}
       about_sub: '自动化 x AI 全栈 | 驾驭 AI 的架构师。坦诚记录我的极限开发之路。',
       about_c1_kicker: '01',
       about_c1_title: 'AI 驾驭与全栈实践',
-      about_c1_body: '说实话，这个网页90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。',
+      about_c1_body: '说实话，这个网页的90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。',
       about_c2_kicker: '02',
       about_c2_title: '巡航算法认知',
       about_c2_body: '作为一个自动化学生，我虽不能闭卷手写A*，但我通过AI辅助，深刻理解了‘全局与局部解耦’的巡航逻辑：全局层面，A*负责在静态地图寻找最优路径；局部层面，DWA负责处理动态障碍物微调。我在Canvas操控中，将差速运动学（x += cos(yaw)*v*dt）在浏览器里进行了降维映射，打通了从上位机指令到底盘控制的全局认知。',
       about_c3_kicker: '03',
       about_c3_title: '工程实践与降维打击',
       about_c3_body: '真正的工程是一场与现实的搏斗。我遭遇了DSH沙箱写文件报错、平板浏览器内存溢出导致GitHub无法Commit、甚至GitHub被墙。我最终通过“上传文件覆盖”绕过限制，并用无痕模式击穿了缓存。我深刻明白：在极限交付中，稳定的MVP（最小可行性产品）永远优于跑不起来的完美方案。',
+      about_c3_sub_label: '插件探索',
+      about_c3_sub_body: '我尝试在安卓 Termux 环境下部署 dsh-synapse（会话地图插件），遭遇了 ARM64 架构下原生模块 require-builtin.node 的编译缺失。这让我意识到移动端部署 AI 环境存在巨大的兼容性壁垒。随后我果断止损，转向标准桌面环境（笔记本）重新梳理 Node.js、pnpm 与 DSH 插件的依赖链路。虽未能完美跑通，但这次失败让我深刻理解了 DSH 的微内核插件机制。从‘使用者’向‘创造者’迈进，我选择从失败中复盘，而非止步于表面。',
       about_cta: '进入控制台 ↓'
     }
   };
