@@ -466,7 +466,7 @@ html{scroll-behavior:smooth}
 }
 
 /* =====================================================================
-   ALGO DEMO MODAL  (self-contained: .algo-* / #algoCanvas only)
+   ALGO DEMO MODAL  (visual upgrade — .algo-* / #algoCanvas only)
    ===================================================================== */
 .algo-open{
   width:100%;color:#d7f7ff;border-color:rgba(34,211,238,.4);
@@ -476,15 +476,18 @@ html{scroll-behavior:smooth}
 
 .algo-modal{
   position:fixed;inset:0;z-index:200;display:none;
-  align-items:center;justify-content:center;padding:18px;
-  background:rgba(3,7,13,.82);backdrop-filter:blur(3px);
+  align-items:center;justify-content:center;padding:16px;
+  background:
+    radial-gradient(900px 520px at 50% 0%, rgba(34,211,238,.07), transparent 65%),
+    rgba(2,5,10,.88);
+  backdrop-filter:blur(4px);
 }
 .algo-modal.open{display:flex}
 .algo-box{
-  width:min(560px,100%);max-height:92vh;overflow:auto;
-  background:linear-gradient(180deg,#0e1a2b,#0a1320);
-  border:1px solid var(--line);border-radius:16px;padding:16px;
-  box-shadow:0 30px 80px rgba(0,0,0,.7);
+  width:min(1020px,100%);max-height:94vh;overflow:auto;
+  background:linear-gradient(180deg,#0b1524,#070d16);
+  border:1px solid #1d3350;border-radius:16px;padding:16px;
+  box-shadow:0 30px 90px rgba(0,0,0,.75),0 0 0 1px rgba(34,211,238,.06) inset;
 }
 .algo-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .algo-title{
@@ -498,10 +501,53 @@ html{scroll-behavior:smooth}
   transition:border-color .18s,box-shadow .18s;
 }
 .algo-close:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+
+.algo-body{display:grid;grid-template-columns:1.05fr 1fr;gap:12px;align-items:start}
+.algo-stage{position:relative}
 #algoCanvas{
-  display:block;width:100%;aspect-ratio:1/1;
-  border:1px solid var(--line);border-radius:12px;background:#080d16;
+  display:block;width:100%;aspect-ratio:1/1;max-height:58vh;
+  border:1px solid #16283f;border-radius:12px;background:#04060b;
+  box-shadow:inset 0 0 60px rgba(0,0,0,.9),0 0 0 1px rgba(34,211,238,.05);
 }
+
+.algo-term{
+  display:flex;flex-direction:column;
+  height:100%;min-height:220px;max-height:58vh;
+  background:#04070c;border:1px solid #16283f;border-radius:12px;overflow:hidden;
+  box-shadow:inset 0 0 40px rgba(0,0,0,.85);
+}
+.algo-term-bar{
+  display:flex;align-items:center;gap:6px;
+  padding:7px 10px;background:#081019;border-bottom:1px solid #142438;
+  font-family:var(--mono);font-size:10.5px;color:#5b7093;letter-spacing:.08em;
+}
+.algo-term-bar i{width:8px;height:8px;border-radius:50%;background:#1e3050}
+.algo-term-bar i:nth-child(1){background:#f87171}
+.algo-term-bar i:nth-child(2){background:#fbbf24}
+.algo-term-bar i:nth-child(3){background:#34d399}
+.algo-term-bar span{margin-left:6px}
+.algo-term-body{
+  flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:9px 10px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.65;color:#67e8f9;
+}
+.algo-line{white-space:pre;animation:algoLineIn .18s ease-out both}
+.algo-line.dim{color:#3f6b7a}
+.algo-line.info{color:#67e8f9}
+.algo-line.ok{color:#34d399}
+.algo-line.warn{color:#fbbf24}
+.algo-line.hit{color:#e879f9}
+@keyframes algoLineIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.algo-term-prompt{
+  display:flex;align-items:center;gap:6px;padding:6px 10px 8px;
+  font-family:var(--mono);font-size:11px;color:#34d399;
+  border-top:1px solid #0f1c2c;
+}
+.algo-cursor{
+  display:inline-block;width:8px;height:13px;background:#22d3ee;
+  animation:algoBlink 1s steps(2,end) infinite;
+}
+@keyframes algoBlink{50%{opacity:0}}
+
 .algo-legend{
   display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;
   font-size:10.5px;color:var(--dim-2);
@@ -511,6 +557,13 @@ html{scroll-behavior:smooth}
   margin-right:5px;vertical-align:middle;
 }
 .algo-status{margin-top:8px;font-family:var(--mono);font-size:11.5px;color:var(--cyan)}
+
+@media (max-width:720px){
+  .algo-body{grid-template-columns:1fr}
+  .algo-box{max-height:92vh}
+  #algoCanvas{max-height:46vh}
+  .algo-term{max-height:34vh;min-height:150px}
+}
 </style>
 </head>
 <body>
@@ -773,14 +826,28 @@ html{scroll-behavior:smooth}
         <h3 class="algo-title" id="algoTitle" data-i18n="algo_title">A* 全局路径规划可视化 | A* Global Path Planning</h3>
         <button class="algo-close" id="algoClose" type="button" data-i18n="algo_close">关闭 | CLOSE</button>
       </div>
-      <canvas id="algoCanvas"></canvas>
+
+      <div class="algo-body">
+        <div class="algo-stage">
+          <canvas id="algoCanvas"></canvas>
+        </div>
+
+        <div class="algo-term">
+          <div class="algo-term-bar">
+            <i></i><i></i><i></i>
+            <span>dsh@algo — a_star.js</span>
+          </div>
+          <div class="algo-term-body" id="algoTerm"></div>
+          <div class="algo-term-prompt">&gt;&nbsp;<span class="algo-cursor"></span></div>
+        </div>
+      </div>
+
       <div class="algo-legend">
-        <span><i style="background:#34d399"></i>Start 起点</span>
-        <span><i style="background:#f87171"></i>Goal 终点</span>
+        <span><i style="background:#22d3ee"></i>Start 起点</span>
+        <span><i style="background:#e879f9"></i>Goal 终点</span>
         <span><i style="background:#a78bfa"></i>Obstacle 障碍</span>
-        <span><i style="background:#fbbf24"></i>Open 待探索</span>
+        <span><i style="background:#22d3ee"></i>Open 待探索</span>
         <span><i style="background:#1e3a8a"></i>Closed 已探索</span>
-        <span><i style="background:#22d3ee"></i>Path 路径</span>
       </div>
       <div class="algo-status" id="algoStatus">…</div>
     </div>
@@ -2893,10 +2960,9 @@ html{scroll-behavior:smooth}
 })();
 
 /* =====================================================================
-   ALGO DEMO MODAL — fully self-contained (Batch "A* visualization").
-   Own scope (its own IIFE), own canvas (#algoCanvas), own element ids.
-   It reads nothing from the teleop console and writes nothing into it,
-   so the joystick / #map rendering / mission state machine are untouched.
+   ALGO DEMO MODAL — self-contained A* visualiser (visual upgrade).
+   Own IIFE scope, own canvas (#algoCanvas), own pseudo-terminal.
+   It reads nothing from the teleop console and writes nothing into it.
    ===================================================================== */
 (function () {
   'use strict';
@@ -2904,14 +2970,16 @@ html{scroll-behavior:smooth}
   var N = 15;                          // 15 x 15 grid
   var START = { x: 0, y: 0 };          // top-left
   var GOAL  = { x: N - 1, y: N - 1 };  // bottom-right
-  var STEP_MS = 50;                    // one node per 50 ms
-  var HOLD_MS = 2500;                  // pause on the finished path, then replay
+  var STEP_MS = 50;                    // one node expanded per 50 ms
+  var HOLD_MS = 2600;                  // pause on the finished path, then replay
+  var TERM_MAX = 70;                   // terminal scrollback
+  var TAU = Math.PI * 2;
 
-  // ---- fixed obstacle layout (always solvable, forced zig-zag) ----
+  // fixed obstacle layout: two staggered walls + decoration (always solvable)
   var WALLS = (function () {
-    var list = [], x, y;
-    for (y = 0; y <= 10; y++) { list.push(4 + ',' + y); }   // wall with a gap at the bottom
-    for (y = 4; y <= 14; y++) { list.push(9 + ',' + y); }   // wall with a gap at the top
+    var list = [], y;
+    for (y = 0; y <= 10; y++) { list.push(4 + ',' + y); }   // wall, gap at the bottom
+    for (y = 4; y <= 14; y++) { list.push(9 + ',' + y); }   // wall, gap at the top
     list.push('6,6'); list.push('7,6'); list.push('6,7'); list.push('7,7');
     list.push('11,7'); list.push('11,8'); list.push('11,9');
     return list;
@@ -2923,34 +2991,66 @@ html{scroll-behavior:smooth}
   var openBtn  = document.getElementById('algoOpen');
   var closeBtn = document.getElementById('algoClose');
   var statusEl = document.getElementById('algoStatus');
+  var termEl   = document.getElementById('algoTerm');
   if (!modal || !canvas || !openBtn || !closeBtn) { return; }
 
   var ctx = canvas.getContext('2d');
-  var cw = 0, ch = 0, cell = 0, timer = null;
+  var cw = 0, ch = 0, cell = 0, ox = 0, oy = 0, dpr = 1;
+  var stepTimer = null, rafId = null, clock = 0, clock0 = 0;
+  var pulse = 0, travel = 0, runNo = 0;
 
-  // ---- search state (rebuilt on every run) ----
-  var openList, closedSet, cameFrom, gScore, path, solved, failed, hold, explored;
+  // search state, rebuilt on every run
+  var openList, closedSet, cameFrom, gScore, path, solved, failed, hold, explored, wallHits;
 
+  /* ---------------- pseudo-terminal ---------------- */
+  function termLine(text, cls) {
+    if (!termEl) { return; }
+    var d = document.createElement('div');
+    d.className = 'algo-line' + (cls ? ' ' + cls : '');
+    d.textContent = text;
+    termEl.appendChild(d);
+    while (termEl.childNodes.length > TERM_MAX) { termEl.removeChild(termEl.firstChild); }
+    termEl.scrollTop = termEl.scrollHeight;
+  }
+  function termRule(tag) {
+    var dashes = '';
+    for (var i = tag.length; i < 26; i++) { dashes += '\u2500'; }
+    termLine('', 'dim');
+    termLine('\u2500\u2500 ' + tag + ' ' + dashes, 'dim');
+  }
+  function pad(n) { return (n < 10 ? ' ' : '') + n; }
+
+  /* ---------------- A* ---------------- */
   function reset() {
-    openList = [{ x: START.x, y: START.y }];
+    openList  = [{ x: START.x, y: START.y }];
     closedSet = {};
-    cameFrom = {};
-    gScore = {};
+    cameFrom  = {};
+    gScore    = {};
     gScore[START.x + ',' + START.y] = 0;
-    path = null; solved = false; failed = false; hold = 0; explored = 0;
+    path = null; solved = false; failed = false; hold = 0; explored = 0; wallHits = 0;
+    runNo++;
+    termRule('run #' + runNo);
+    termLine('> Init A* ....... grid 15x15', 'info');
+    termLine('> start (0,0)  goal (14,14)', 'dim');
+    termLine('> heuristic : Manhattan  f = g + h', 'dim');
+    termLine('> open = [(0,0)]   closed = []', 'dim');
   }
 
-  function dist(x, y) { return Math.abs(x - GOAL.x) + Math.abs(y - GOAL.y); }  // Manhattan
+  function dist(x, y) { return Math.abs(x - GOAL.x) + Math.abs(y - GOAL.y); }
 
   function step() {
     if (solved || failed) {
       if (hold > 0) { hold -= STEP_MS; if (hold <= 0) { reset(); } }
-      draw();
       return;
     }
-    if (openList.length === 0) { failed = true; hold = HOLD_MS; draw(); return; }
+    if (openList.length === 0) {
+      failed = true; hold = HOLD_MS;
+      termLine('> Frontier empty — no path exists.', 'warn');
+      termLine('> Aborting search.', 'warn');
+      return;
+    }
 
-    // pick the frontier node with the lowest f = g + h
+    // expand the frontier node with the lowest f
     var bi = 0, bf = Infinity, i, n, f;
     for (i = 0; i < openList.length; i++) {
       n = openList[i];
@@ -2961,6 +3061,8 @@ html{scroll-behavior:smooth}
     var ck = cur.x + ',' + cur.y;
     closedSet[ck] = true;
     explored++;
+    termLine('> Exploring (' + pad(cur.x) + ',' + pad(cur.y) + ') | F=' + pad(bf) +
+             ' G=' + pad(gScore[ck]) + ' H=' + pad(dist(cur.x, cur.y)), 'info');
 
     if (cur.x === GOAL.x && cur.y === GOAL.y) {
       var p = [], key = ck, parts;
@@ -2971,7 +3073,10 @@ html{scroll-behavior:smooth}
       }
       p.reverse();
       path = p; solved = true; hold = HOLD_MS;
-      draw();
+      termLine('> Path found!', 'ok');
+      termLine('  cost=' + (p.length - 1) + ' steps   nodes=' + explored, 'ok');
+      termLine('> Reconstructing ' + p.length + ' waypoints ...', 'ok');
+      termLine('> Rendering trajectory.', 'ok');
       return;
     }
 
@@ -2979,7 +3084,13 @@ html{scroll-behavior:smooth}
     for (i = 0; i < DIRS.length; i++) {
       var nx = cur.x + DIRS[i][0], ny = cur.y + DIRS[i][1];
       if (nx < 0 || ny < 0 || nx >= N || ny >= N) { continue; }
-      if (isWall(nx, ny)) { continue; }
+      if (isWall(nx, ny)) {
+        wallHits++;
+        if (wallHits % 6 === 1) {
+          termLine('  ! obstacle at (' + pad(nx) + ',' + pad(ny) + ') — rerouting...', 'hit');
+        }
+        continue;
+      }
       var nk = nx + ',' + ny;
       if (closedSet[nk]) { continue; }
       var tentative = gScore[ck] + 1;
@@ -2991,96 +3102,179 @@ html{scroll-behavior:smooth}
         }
       }
     }
-    draw();
   }
 
+  /* ---------------- canvas ---------------- */
   function fit() {
     var w = Math.max(1, Math.round(canvas.clientWidth || 1));
     var h = Math.round(canvas.clientHeight || 0);
     if (h <= 1) { h = w; }                       // fallback if aspect-ratio is unsupported
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cw = w; ch = h;
-    cell = Math.min(cw, ch) / N;
+    cell = Math.floor(Math.min(cw, ch) / N);
+    ox = (cw - cell * N) / 2;
+    oy = (ch - cell * N) / 2;
     draw();
+  }
+
+  // point along the solved path, t in 0..1 (used by the travelling light)
+  function pathPoint(t) {
+    if (!path || path.length < 2) { return null; }
+    var segs = path.length - 1;
+    var f = t * segs;
+    var i = Math.min(segs - 1, Math.floor(f));
+    var frac = f - i;
+    var a = path[i], b = path[i + 1];
+    return {
+      x: ox + (a.x + (b.x - a.x) * frac + 0.5) * cell,
+      y: oy + (a.y + (b.y - a.y) * frac + 0.5) * cell
+    };
   }
 
   function draw() {
     if (!cell) { return; }
-    var i, x, y, px, py, key, cx0, cy0, bx, by, ang, s;
-    var openMap = {};
-    if (openList) { for (i = 0; i < openList.length; i++) { openMap[openList[i].x + ',' + openList[i].y] = true; } }
+    var i, x, y, px, py, key, gx, gy, sx, sy;
 
     ctx.clearRect(0, 0, cw, ch);
-    ctx.fillStyle = '#080d16';
+    ctx.fillStyle = '#04060b';
     ctx.fillRect(0, 0, cw, ch);
 
-    // cells: obstacle / closed / open / free
-    for (y = 0; y < N; y++) {
-      for (x = 0; x < N; x++) {
-        key = x + ',' + y;
-        px = x * cell; py = y * cell;
-        if (isWall(x, y)) { ctx.fillStyle = '#a78bfa'; }
-        else if (closedSet && closedSet[key]) { ctx.fillStyle = '#1e3a8a'; }
-        else if (openMap[key]) { ctx.fillStyle = 'rgba(251,191,36,.8)'; }
-        else { ctx.fillStyle = 'rgba(148,169,196,.06)'; }
-        ctx.fillRect(px + 1, py + 1, cell - 2, cell - 2);
-      }
-    }
-
-    // grid lines
-    ctx.strokeStyle = 'rgba(127,150,184,.18)';
+    // very faint grid
+    ctx.strokeStyle = 'rgba(127,150,184,.07)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (i = 0; i <= N; i++) {
-      px = Math.round(i * cell) + 0.5;
-      ctx.moveTo(px, 0); ctx.lineTo(px, N * cell);
-      ctx.moveTo(0, px); ctx.lineTo(N * cell, px);
+      px = Math.round(ox + i * cell) + 0.5;
+      py = Math.round(oy + i * cell) + 0.5;
+      ctx.moveTo(px, oy); ctx.lineTo(px, oy + N * cell);
+      ctx.moveTo(ox, py); ctx.lineTo(ox + N * cell, py);
     }
     ctx.stroke();
 
-    // start (green) and goal (red)
-    ctx.fillStyle = '#34d399';
-    ctx.fillRect(START.x * cell + 2, START.y * cell + 2, cell - 4, cell - 4);
-    ctx.fillStyle = '#f87171';
-    ctx.fillRect(GOAL.x * cell + 2, GOAL.y * cell + 2, cell - 4, cell - 4);
+    // closed set (batched, no glow)
+    ctx.beginPath();
+    for (y = 0; y < N; y++) {
+      for (x = 0; x < N; x++) {
+        if (!closedSet || !closedSet[x + ',' + y] || isWall(x, y)) { continue; }
+        ctx.rect(ox + x * cell + 1, oy + y * cell + 1, cell - 2, cell - 2);
+      }
+    }
+    ctx.fillStyle = 'rgba(23,42,92,.8)';
+    ctx.fill();
 
-    // final path: cyan dashed line + arrow heads
+    // obstacles (batched)
+    ctx.beginPath();
+    for (y = 0; y < N; y++) {
+      for (x = 0; x < N; x++) {
+        if (!isWall(x, y)) { continue; }
+        ctx.rect(ox + x * cell + 1.5, oy + y * cell + 1.5, cell - 3, cell - 3);
+      }
+    }
+    ctx.fillStyle = '#5b3fa8';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(167,139,250,.75)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // open list (batched, pulsing cyan glow) — O(N^2) lookup, one shadowed fill
+    var openMap = {};
+    if (openList) {
+      for (i = 0; i < openList.length; i++) {
+        openMap[openList[i].x + ',' + openList[i].y] = true;
+      }
+    }
+    ctx.save();
+    ctx.shadowColor = 'rgba(34,211,238,.9)';
+    ctx.shadowBlur = 6 + 12 * pulse;
+    ctx.beginPath();
+    for (y = 0; y < N; y++) {
+      for (x = 0; x < N; x++) {
+        key = x + ',' + y;
+        if (!openMap[key]) { continue; }
+        if (isWall(x, y) || (closedSet && closedSet[key])) { continue; }
+        ctx.rect(ox + x * cell + 1.5, oy + y * cell + 1.5, cell - 3, cell - 3);
+      }
+    }
+    ctx.fillStyle = 'rgba(34,211,238,' + (0.30 + 0.45 * pulse).toFixed(3) + ')';
+    ctx.fill();
+    ctx.restore();
+
+    // solved path: thick glowing cyan line
     if (path && path.length > 1) {
       ctx.save();
-      ctx.strokeStyle = '#22d3ee';
-      ctx.lineWidth = Math.max(2, cell * 0.16);
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.setLineDash([Math.max(4, cell * 0.34), Math.max(3, cell * 0.24)]);
+      ctx.shadowColor = '#22d3ee';
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = 'rgba(103,232,249,.95)';
+      ctx.lineWidth = Math.max(3, cell * 0.26);
       ctx.beginPath();
       for (i = 0; i < path.length; i++) {
-        cx0 = (path[i].x + 0.5) * cell; cy0 = (path[i].y + 0.5) * cell;
-        if (i === 0) { ctx.moveTo(cx0, cy0); } else { ctx.lineTo(cx0, cy0); }
+        px = ox + (path[i].x + 0.5) * cell;
+        py = oy + (path[i].y + 0.5) * cell;
+        if (i === 0) { ctx.moveTo(px, py); } else { ctx.lineTo(px, py); }
       }
       ctx.stroke();
       ctx.restore();
 
-      for (i = 1; i < path.length; i++) {
-        cx0 = (path[i].x + 0.5) * cell; cy0 = (path[i].y + 0.5) * cell;
-        bx = (path[i - 1].x + 0.5) * cell; by = (path[i - 1].y + 0.5) * cell;
-        ang = Math.atan2(cy0 - by, cx0 - bx);
-        s = Math.max(3, cell * 0.22);
-        ctx.save();
-        ctx.translate(cx0, cy0);
-        ctx.rotate(ang);
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(-s, -s * 0.6);
-        ctx.lineTo(-s, s * 0.6);
-        ctx.closePath();
-        ctx.fillStyle = '#67e8f9';
-        ctx.fill();
-        ctx.restore();
+      // travelling light from start to goal
+      var pt = pathPoint(travel);
+      if (pt) {
+        var g2 = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, cell * 0.95);
+        g2.addColorStop(0, 'rgba(255,255,255,.95)');
+        g2.addColorStop(0.35, 'rgba(103,232,249,.5)');
+        g2.addColorStop(1, 'rgba(34,211,238,0)');
+        ctx.fillStyle = g2;
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, cell * 0.95, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, Math.max(2, cell * 0.14), 0, TAU); ctx.fill();
       }
     }
+
+    // start: neon cyan disc
+    sx = ox + (START.x + 0.5) * cell;
+    sy = oy + (START.y + 0.5) * cell;
+    ctx.save();
+    ctx.shadowColor = '#22d3ee';
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = '#67e8f9';
+    ctx.lineWidth = Math.max(2, cell * 0.1);
+    ctx.beginPath(); ctx.arc(sx, sy, cell * 0.3, 0, TAU); ctx.stroke();
+    ctx.fillStyle = 'rgba(34,211,238,.35)';
+    ctx.beginPath(); ctx.arc(sx, sy, cell * 0.16, 0, TAU); ctx.fill();
+    ctx.restore();
+
+    // goal: magenta crosshair with rotating ticks
+    gx = ox + (GOAL.x + 0.5) * cell;
+    gy = oy + (GOAL.y + 0.5) * cell;
+    ctx.save();
+    ctx.shadowColor = '#e879f9';
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = '#f0abfc';
+    ctx.lineWidth = Math.max(1.6, cell * 0.08);
+    ctx.beginPath(); ctx.arc(gx, gy, cell * 0.32, 0, TAU); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gx - cell * 0.42, gy); ctx.lineTo(gx + cell * 0.42, gy);
+    ctx.moveTo(gx, gy - cell * 0.42); ctx.lineTo(gx, gy + cell * 0.42);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(gx, gy);
+    ctx.rotate(clock * 0.8);
+    ctx.strokeStyle = 'rgba(232,121,249,.8)';
+    ctx.lineWidth = Math.max(1.2, cell * 0.06);
+    for (i = 0; i < 4; i++) {
+      ctx.rotate(Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(cell * 0.46, 0);
+      ctx.lineTo(cell * 0.6, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
 
     if (statusEl) {
       if (failed) { statusEl.textContent = '无解 No path found'; }
@@ -3089,19 +3283,35 @@ html{scroll-behavior:smooth}
     }
   }
 
+  /* ---------------- loops ---------------- */
+  function loop(ts) {
+    if (!clock0) { clock0 = ts; }
+    clock = (ts - clock0) / 1000;
+    pulse = 0.5 + 0.5 * Math.sin(clock * 3.4);
+    travel = (clock * 0.5) % 1;
+    draw();
+    rafId = window.requestAnimationFrame(loop);
+  }
+
   function openModal() {
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
-    fit();                       // must run AFTER .open, while the canvas has a size
+    fit();                        // must run AFTER .open, while the canvas has a size
     reset();
-    if (timer) { clearInterval(timer); }
-    timer = setInterval(step, STEP_MS);
+    if (stepTimer) { window.clearInterval(stepTimer); }
+    stepTimer = window.setInterval(step, STEP_MS);
+    if (!rafId) {
+      clock0 = 0;
+      rafId = window.requestAnimationFrame(loop);
+    }
   }
 
   function closeModal() {
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
-    if (timer) { clearInterval(timer); timer = null; }
+    if (stepTimer) { window.clearInterval(stepTimer); stepTimer = null; }
+    if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
+    clock0 = 0;
   }
 
   openBtn.addEventListener('click', openModal);
