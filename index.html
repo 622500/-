@@ -384,9 +384,125 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms !important;transition-duration:.001ms !important}
 }
+
+/* =====================================================================
+   #about — "MEET THE REAL ME"   (sits above the console)
+   Every rule is scoped to #about. .panel / .sec / .sec-label / .sec-title /
+   .grid3 are defined here so nothing else in the file is touched.
+   ===================================================================== */
+
+/* Required: body is overflow:hidden and .app is 100dvh, so a section above
+   the console would push its bottom out of view. Applies only with #about. */
+body:has(#about){overflow-y:auto;height:auto;min-height:100%}
+html{scroll-behavior:smooth}
+
+#about{
+  position:relative;
+  padding:56px 28px 46px;
+  border-bottom:1px solid var(--line);
+  background:
+    radial-gradient(900px 420px at 15% 0%, rgba(34,211,238,.09) 0%, transparent 62%),
+    radial-gradient(700px 380px at 100% 100%, rgba(167,139,250,.08) 0%, transparent 60%),
+    linear-gradient(180deg,#070c14,#05080e);
+}
+#about .about-wrap{max-width:1180px;margin:0 auto}
+#about .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+
+#about .sec-label{
+  font-family:var(--mono);font-size:11px;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--cyan);margin-bottom:10px;
+}
+#about .sec-title{
+  font-size:clamp(22px,3.2vw,34px);font-weight:750;letter-spacing:.02em;
+  color:var(--txt);margin:0 0 12px;line-height:1.25;
+}
+#about .about-title .en{
+  font-family:var(--mono);font-size:.6em;font-weight:650;
+  letter-spacing:.14em;color:var(--cyan);white-space:nowrap;
+}
+#about .about-title .bar{color:var(--dim-2);font-weight:400;margin:0 10px}
+#about .about-sub{
+  font-size:13.5px;line-height:1.75;color:var(--dim);
+  max-width:860px;margin:0 0 28px;
+}
+
+#about .panel{
+  position:relative;
+  background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));
+  border:1px solid var(--line);border-radius:14px;padding:16px;
+  transition:border-color .2s,transform .2s,box-shadow .2s;
+}
+#about .panel.sec::before{
+  content:"";position:absolute;left:0;right:0;top:0;height:2px;
+  border-radius:14px 14px 0 0;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  opacity:.55;
+}
+#about .panel:hover{
+  border-color:#2d4a6d;transform:translateY(-2px);
+  box-shadow:0 14px 30px rgba(0,0,0,.45);
+}
+#about .panel .sec-label{letter-spacing:.2em;margin-bottom:8px}
+#about .panel .sec-title{font-size:14px;font-weight:700;margin:0 0 9px;line-height:1.45}
+#about .sec-body{font-size:12.5px;line-height:1.9;color:#b9cfe8;margin:0}
+
+#about .about-cta{
+  display:inline-flex;align-items:center;gap:7px;margin-top:26px;
+  padding:9px 16px;border-radius:10px;text-decoration:none;
+  border:1px solid #24405f;color:var(--cyan);font-size:12.5px;font-weight:650;
+  background:linear-gradient(180deg,#12253c,#0c1728);
+  transition:border-color .18s,box-shadow .18s;
+}
+#about .about-cta:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+
+@media (max-width:1040px){
+  #about{padding:40px 18px 34px}
+  #about .grid3{grid-template-columns:1fr;gap:12px}
+  #about .about-title .en{white-space:normal}
+}
 </style>
 </head>
 <body>
+
+  <!-- ================= INTRO : MEET THE REAL ME ================= -->
+  <section id="about">
+    <div class="about-wrap">
+
+      <div class="sec-label" data-i18n="about_tag">ABOUT</div>
+
+      <h2 class="sec-title about-title">
+        <span data-i18n="about_title">展示真实的你</span>
+        <span class="bar">|</span>
+        <span class="en" data-i18n="about_title_en">MEET THE REAL ME</span>
+      </h2>
+
+      <p class="about-sub" data-i18n="about_sub">自动化 x AI 全栈 | 驾驭 AI 的架构师。坦诚记录我的极限开发之路。</p>
+
+      <div class="grid3">
+
+        <article class="panel sec">
+          <div class="sec-label" data-i18n="about_c1_kicker">01</div>
+          <h3 class="sec-title" data-i18n="about_c1_title">AI 驾驭与全栈实践</h3>
+          <p class="sec-body" data-i18n="about_c1_body">说实话，这个网页90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。</p>
+        </article>
+
+        <article class="panel sec">
+          <div class="sec-label" data-i18n="about_c2_kicker">02</div>
+          <h3 class="sec-title" data-i18n="about_c2_title">巡航算法认知</h3>
+          <p class="sec-body" data-i18n="about_c2_body">作为一个自动化学生，我虽不能闭卷手写A*，但我通过AI辅助，深刻理解了‘全局与局部解耦’的巡航逻辑：全局层面，A*负责在静态地图寻找最优路径；局部层面，DWA负责处理动态障碍物微调。我在Canvas操控中，将差速运动学（x += cos(yaw)*v*dt）在浏览器里进行了降维映射，打通了从上位机指令到底盘控制的全局认知。</p>
+        </article>
+
+        <article class="panel sec">
+          <div class="sec-label" data-i18n="about_c3_kicker">03</div>
+          <h3 class="sec-title" data-i18n="about_c3_title">工程实践与降维打击</h3>
+          <p class="sec-body" data-i18n="about_c3_body">真正的工程是一场与现实的搏斗。我遭遇了DSH沙箱写文件报错、平板浏览器内存溢出导致GitHub无法Commit、甚至GitHub被墙。我最终通过“上传文件覆盖”绕过限制，并用无痕模式击穿了缓存。我深刻明白：在极限交付中，稳定的MVP（最小可行性产品）永远优于跑不起来的完美方案。</p>
+        </article>
+
+      </div>
+
+      <a class="about-cta" href="#app" data-i18n="about_cta">进入控制台 ↓</a>
+    </div>
+  </section>
 
 <div class="app" id="app">
 
@@ -769,7 +885,21 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       log_inspect_start: 'Inspection sweep started · {t} s dwell',
       log_inspect_done: 'Inspection complete · returning to idle',
       log_low_batt: 'BATTERY LOW · {p}% remaining',
-      reason_manual: 'manual override', reason_estop: 'E-Stop'
+      reason_manual: 'manual override', reason_estop: 'E-Stop',
+      about_tag: 'ABOUT',
+      about_title: '展示真实的你',
+      about_title_en: 'MEET THE REAL ME',
+      about_sub: 'Automation \u00d7 AI Full-Stack | The architect who drives AI. An honest log of an extreme-development path.',
+      about_c1_kicker: '01',
+      about_c1_title: 'AI Orchestration',
+      about_c1_body: 'Honestly, 90% of the code on this page was generated by AI. But my role was not typist, it was architect. I worked deeply in AI workbenches such as DSH and Codex, and lived through round after round of prompt debugging, a crashing state machine (the robot spinning in place) and misaligned Canvas coordinates. In the end I learned to strike from a higher dimension: AI is an excellent executor, but the owner of the system boundaries and the architecture has to be me.',
+      about_c2_kicker: '02',
+      about_c2_title: 'Algorithm Logic',
+      about_c2_body: 'As an automation student I cannot yet hand-write A* from memory with the book closed, but with AI assistance I have come to genuinely understand the cruising logic of decoupling global from local planning: globally, A* finds the optimal path on a static map; locally, DWA adjusts for dynamic obstacles. In the Canvas controls I mapped differential-drive kinematics (x += cos(yaw) * v * dt) down into the browser, which connected the whole chain from high-level commands to chassis control in my head.',
+      about_c3_kicker: '03',
+      about_c3_title: 'Engineering Resilience',
+      about_c3_body: 'Real engineering is a fight with reality. I ran into DSH sandbox file-write errors, a tablet browser running out of memory so GitHub could not commit, and even GitHub being blocked. I got past it by uploading files to overwrite, and broke through the cache with incognito mode. What I now understand deeply: for extreme delivery, a stable MVP always beats a perfect solution that will not run.',
+      about_cta: 'Enter the console \u2193'
     },
     zh: {
       app_title: '机器人遥操作控制台',
@@ -841,7 +971,21 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
       log_inspect_start: '开始检测扫描 · 停留 {t} 秒',
       log_inspect_done: '检测完成 · 回到待机',
       log_low_batt: '电量偏低 · 剩余 {p}%',
-      reason_manual: '手动接管', reason_estop: '急停'
+      reason_manual: '手动接管', reason_estop: '急停',
+      about_tag: '关于我',
+      about_title: '展示真实的你',
+      about_title_en: 'MEET THE REAL ME',
+      about_sub: '自动化 x AI 全栈 | 驾驭 AI 的架构师。坦诚记录我的极限开发之路。',
+      about_c1_kicker: '01',
+      about_c1_title: 'AI 驾驭与全栈实践',
+      about_c1_body: '说实话，这个网页90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。',
+      about_c2_kicker: '02',
+      about_c2_title: '巡航算法认知',
+      about_c2_body: '作为一个自动化学生，我虽不能闭卷手写A*，但我通过AI辅助，深刻理解了‘全局与局部解耦’的巡航逻辑：全局层面，A*负责在静态地图寻找最优路径；局部层面，DWA负责处理动态障碍物微调。我在Canvas操控中，将差速运动学（x += cos(yaw)*v*dt）在浏览器里进行了降维映射，打通了从上位机指令到底盘控制的全局认知。',
+      about_c3_kicker: '03',
+      about_c3_title: '工程实践与降维打击',
+      about_c3_body: '真正的工程是一场与现实的搏斗。我遭遇了DSH沙箱写文件报错、平板浏览器内存溢出导致GitHub无法Commit、甚至GitHub被墙。我最终通过“上传文件覆盖”绕过限制，并用无痕模式击穿了缓存。我深刻明白：在极限交付中，稳定的MVP（最小可行性产品）永远优于跑不起来的完美方案。',
+      about_cta: '进入控制台 ↓'
     }
   };
 
