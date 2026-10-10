@@ -2960,9 +2960,15 @@ html{scroll-behavior:smooth}
 })();
 
 /* =====================================================================
-   ALGO DEMO MODAL — self-contained A* visualiser (visual upgrade).
+   ALGO DEMO MODAL — self-contained A* visualiser (Batch 3 logic fix).
    Own IIFE scope, own canvas (#algoCanvas), own pseudo-terminal.
-   It reads nothing from the teleop console and writes nothing into it.
+
+   FIX: the search state used to be created inside reset(), but openModal()
+   painted the first frame before reset() ran, so the status line read
+   openList.length while openList was still undefined -> TypeError -> the
+   interval / rAF were never armed (modal opened, everything static).
+   State is now initialised up front, reset() runs BEFORE the first paint,
+   and both loops are guarded so no single frame can kill the animation.
    ===================================================================== */
 (function () {
   'use strict';
@@ -2970,8 +2976,7 @@ html{scroll-behavior:smooth}
   var N = 15;                          // 15 x 15 grid
   var START = { x: 0, y: 0 };          // top-left
   var GOAL  = { x: N - 1, y: N - 1 };  // bottom-right
-  var STEP_MS = 50;                    // one node expanded per 50 ms
-  var HOLD_MS = 2600;                  // pause on the finished path, then replay
+  var STEP_MS = 100;                   // one A* expansion + one terminal line per 100 ms
   var TERM_MAX = 70;                   // terminal scrollback
   var TAU = Math.PI * 2;
 
@@ -2986,21 +2991,20 @@ html{scroll-behavior:smooth}
   })();
   function isWall(x, y) { return WALLS.indexOf(x + ',' + y) >= 0; }
 
-  var modal    = document.getElementById('algoModal');
-  var canvas   = document.getElementById('algoCanvas');
-  var openBtn  = document.getElementById('algoOpen');
-  var closeBtn = document.getElementById('algoClose');
-  var statusEl = document.getElementById('algoStatus');
-  var termEl   = document.getElementById('algoTerm');
-  if (!modal || !canvas || !openBtn || !closeBtn) { return; }
-
-  var ctx = canvas.getContext('2d');
+  var modal = null, canvas = null, ctx = null;
+  var openBtn = null, closeBtn = null, statusEl = null, termEl = null;
   var cw = 0, ch = 0, cell = 0, ox = 0, oy = 0, dpr = 1;
   var stepTimer = null, rafId = null, clock = 0, clock0 = 0;
   var pulse = 0, travel = 0, runNo = 0;
 
-  // search state, rebuilt on every run
-  var openList, closedSet, cameFrom, gScore, path, solved, failed, hold, explored, wallHits;
+  // ---- search state: ALWAYS defined, never undefined during a paint ----
+  var openList = [];
+  var closedSet = {};
+  var cameFrom = {};
+  var gScore = {};
+  var path = null;
+  var solved = false, failed = false, exploring = false;
+  var explored = 0, wallHits = 0;
 
   /* ---------------- pseudo-terminal ---------------- */
   function termLine(text, cls) {
@@ -3013,8 +3017,8 @@ html{scroll-behavior:smooth}
     termEl.scrollTop = termEl.scrollHeight;
   }
   function termRule(tag) {
-    var dashes = '';
-    for (var i = tag.length; i < 26; i++) { dashes += '\u2500'; }
+    var dashes = '', i;
+    for (i = tag.length; i < 26; i++) { dashes += '\u2500'; }
     termLine('', 'dim');
     termLine('\u2500\u2500 ' + tag + ' ' + dashes, 'dim');
   }
@@ -3027,30 +3031,29 @@ html{scroll-behavior:smooth}
     cameFrom  = {};
     gScore    = {};
     gScore[START.x + ',' + START.y] = 0;
-    path = null; solved = false; failed = false; hold = 0; explored = 0; wallHits = 0;
+    path = null; solved = false; failed = false; exploring = true;
+    explored = 0; wallHits = 0;
     runNo++;
     termRule('run #' + runNo);
     termLine('> Init A* ....... grid 15x15', 'info');
-    termLine('> start (0,0)  goal (14,14)', 'dim');
-    termLine('> heuristic : Manhattan  f = g + h', 'dim');
+    termLine('> start (0,0)   goal (14,14)', 'dim');
+    termLine('> heuristic Manhattan   f = g + h', 'dim');
     termLine('> open = [(0,0)]   closed = []', 'dim');
   }
 
   function dist(x, y) { return Math.abs(x - GOAL.x) + Math.abs(y - GOAL.y); }
 
   function step() {
-    if (solved || failed) {
-      if (hold > 0) { hold -= STEP_MS; if (hold <= 0) { reset(); } }
-      return;
-    }
+    if (!exploring) { return; }
     if (openList.length === 0) {
-      failed = true; hold = HOLD_MS;
+      exploring = false; failed = true;
       termLine('> Frontier empty — no path exists.', 'warn');
       termLine('> Aborting search.', 'warn');
+      stopStepping();
       return;
     }
 
-    // expand the frontier node with the lowest f
+    // expand the frontier node with the lowest f = g + h
     var bi = 0, bf = Infinity, i, n, f;
     for (i = 0; i < openList.length; i++) {
       n = openList[i];
@@ -3061,9 +3064,10 @@ html{scroll-behavior:smooth}
     var ck = cur.x + ',' + cur.y;
     closedSet[ck] = true;
     explored++;
-    termLine('> Exploring (' + pad(cur.x) + ',' + pad(cur.y) + ') | F=' + pad(bf) +
+    termLine('> Opening node (' + pad(cur.x) + ',' + pad(cur.y) + ') | F=' + pad(bf) +
              ' G=' + pad(gScore[ck]) + ' H=' + pad(dist(cur.x, cur.y)), 'info');
 
+    // ---- goal reached: stop stepping, keep painting the glow ----
     if (cur.x === GOAL.x && cur.y === GOAL.y) {
       var p = [], key = ck, parts;
       while (key) {
@@ -3072,11 +3076,11 @@ html{scroll-behavior:smooth}
         key = cameFrom[key];
       }
       p.reverse();
-      path = p; solved = true; hold = HOLD_MS;
-      termLine('> Path found!', 'ok');
+      path = p; solved = true; exploring = false;
+      termLine('> Path found! Rendering trajectory...', 'ok');
       termLine('  cost=' + (p.length - 1) + ' steps   nodes=' + explored, 'ok');
-      termLine('> Reconstructing ' + p.length + ' waypoints ...', 'ok');
-      termLine('> Rendering trajectory.', 'ok');
+      termLine('> Trajectory complete. Close & reopen to replay.', 'ok');
+      stopStepping();
       return;
     }
 
@@ -3086,8 +3090,8 @@ html{scroll-behavior:smooth}
       if (nx < 0 || ny < 0 || nx >= N || ny >= N) { continue; }
       if (isWall(nx, ny)) {
         wallHits++;
-        if (wallHits % 6 === 1) {
-          termLine('  ! obstacle at (' + pad(nx) + ',' + pad(ny) + ') — rerouting...', 'hit');
+        if (wallHits % 5 === 1) {
+          termLine('  ! Obstacle hit at (' + pad(nx) + ',' + pad(ny) + '), rerouting...', 'hit');
         }
         continue;
       }
@@ -3106,6 +3110,7 @@ html{scroll-behavior:smooth}
 
   /* ---------------- canvas ---------------- */
   function fit() {
+    if (!canvas || !ctx) { return; }
     var w = Math.max(1, Math.round(canvas.clientWidth || 1));
     var h = Math.round(canvas.clientHeight || 0);
     if (h <= 1) { h = w; }                       // fallback if aspect-ratio is unsupported
@@ -3114,13 +3119,13 @@ html{scroll-behavior:smooth}
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cw = w; ch = h;
-    cell = Math.floor(Math.min(cw, ch) / N);
+    cell = Math.floor(Math.min(cw, ch) / N) || 1;
     ox = (cw - cell * N) / 2;
     oy = (ch - cell * N) / 2;
     draw();
   }
 
-  // point along the solved path, t in 0..1 (used by the travelling light)
+  // point along the solved path, t in 0..1 (the travelling light)
   function pathPoint(t) {
     if (!path || path.length < 2) { return null; }
     var segs = path.length - 1;
@@ -3135,7 +3140,7 @@ html{scroll-behavior:smooth}
   }
 
   function draw() {
-    if (!cell) { return; }
+    if (!ctx || !cell) { return; }
     var i, x, y, px, py, key, gx, gy, sx, sy;
 
     ctx.clearRect(0, 0, cw, ch);
@@ -3154,18 +3159,18 @@ html{scroll-behavior:smooth}
     }
     ctx.stroke();
 
-    // closed set (batched, no glow)
+    // closed list (batched, dark blue, no glow)
     ctx.beginPath();
     for (y = 0; y < N; y++) {
       for (x = 0; x < N; x++) {
-        if (!closedSet || !closedSet[x + ',' + y] || isWall(x, y)) { continue; }
+        if (!closedSet[x + ',' + y] || isWall(x, y)) { continue; }
         ctx.rect(ox + x * cell + 1, oy + y * cell + 1, cell - 2, cell - 2);
       }
     }
-    ctx.fillStyle = 'rgba(23,42,92,.8)';
+    ctx.fillStyle = 'rgba(23,42,92,.85)';
     ctx.fill();
 
-    // obstacles (batched)
+    // obstacles (batched, purple)
     ctx.beginPath();
     for (y = 0; y < N; y++) {
       for (x = 0; x < N; x++) {
@@ -3179,12 +3184,10 @@ html{scroll-behavior:smooth}
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // open list (batched, pulsing cyan glow) — O(N^2) lookup, one shadowed fill
+    // open list (batched: one shadowed fill -> pulsing cyan squares)
     var openMap = {};
-    if (openList) {
-      for (i = 0; i < openList.length; i++) {
-        openMap[openList[i].x + ',' + openList[i].y] = true;
-      }
+    for (i = 0; i < openList.length; i++) {
+      openMap[openList[i].x + ',' + openList[i].y] = true;
     }
     ctx.save();
     ctx.shadowColor = 'rgba(34,211,238,.9)';
@@ -3194,7 +3197,7 @@ html{scroll-behavior:smooth}
       for (x = 0; x < N; x++) {
         key = x + ',' + y;
         if (!openMap[key]) { continue; }
-        if (isWall(x, y) || (closedSet && closedSet[key])) { continue; }
+        if (isWall(x, y) || closedSet[key]) { continue; }
         ctx.rect(ox + x * cell + 1.5, oy + y * cell + 1.5, cell - 3, cell - 3);
       }
     }
@@ -3202,7 +3205,7 @@ html{scroll-behavior:smooth}
     ctx.fill();
     ctx.restore();
 
-    // solved path: thick glowing cyan line
+    // solved path: thick glowing cyan line + travelling light
     if (path && path.length > 1) {
       ctx.save();
       ctx.lineJoin = 'round';
@@ -3220,7 +3223,6 @@ html{scroll-behavior:smooth}
       ctx.stroke();
       ctx.restore();
 
-      // travelling light from start to goal
       var pt = pathPoint(travel);
       if (pt) {
         var g2 = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, cell * 0.95);
@@ -3234,7 +3236,7 @@ html{scroll-behavior:smooth}
       }
     }
 
-    // start: neon cyan disc
+    // start node: neon cyan disc
     sx = ox + (START.x + 0.5) * cell;
     sy = oy + (START.y + 0.5) * cell;
     ctx.save();
@@ -3247,7 +3249,7 @@ html{scroll-behavior:smooth}
     ctx.beginPath(); ctx.arc(sx, sy, cell * 0.16, 0, TAU); ctx.fill();
     ctx.restore();
 
-    // goal: magenta crosshair with rotating ticks
+    // goal node: magenta crosshair with rotating ticks
     gx = ox + (GOAL.x + 0.5) * cell;
     gy = oy + (GOAL.y + 0.5) * cell;
     ctx.save();
@@ -3276,53 +3278,96 @@ html{scroll-behavior:smooth}
     }
     ctx.restore();
 
+    // status line (null-safe)
     if (statusEl) {
       if (failed) { statusEl.textContent = '无解 No path found'; }
-      else if (solved) { statusEl.textContent = '路径 Path: ' + Math.max(0, path.length - 1) + ' 步 steps | 已探索 Explored: ' + explored; }
-      else { statusEl.textContent = '待探索 Open: ' + openList.length + ' | 已探索 Explored: ' + explored + ' | f = g + h'; }
+      else if (solved) { statusEl.textContent = '路径 Path: ' + Math.max(0, (path ? path.length : 1) - 1) + ' 步 steps | 已探索 Explored: ' + explored; }
+      else { statusEl.textContent = '待探索 Open: ' + (openList ? openList.length : 0) + ' | 已探索 Explored: ' + explored + ' | f = g + h'; }
     }
   }
 
   /* ---------------- loops ---------------- */
-  function loop(ts) {
-    if (!clock0) { clock0 = ts; }
-    clock = (ts - clock0) / 1000;
-    pulse = 0.5 + 0.5 * Math.sin(clock * 3.4);
-    travel = (clock * 0.5) % 1;
-    draw();
-    rafId = window.requestAnimationFrame(loop);
+  function safeStep() {
+    try { step(); }
+    catch (err) { exploring = false; stopStepping(); if (window.console) { window.console.warn('[algo] step failed', err); } }
+  }
+
+  function stopStepping() {
+    if (stepTimer) { window.clearInterval(stepTimer); stepTimer = null; }
+  }
+
+  function frame(ts) {
+    try {
+      if (!clock0) { clock0 = ts; }
+      clock = (ts - clock0) / 1000;
+      pulse = 0.5 + 0.5 * Math.sin(clock * 3.4);
+      travel = (clock * 0.5) % 1;
+      draw();
+    } catch (err) {
+      if (window.console) { window.console.warn('[algo] draw failed', err); }
+    }
+    rafId = window.requestAnimationFrame(frame);   // keep the visual loop alive
+  }
+
+  function startLoops() {
+    stopStepping();
+    stopRaf();
+    stepTimer = window.setInterval(safeStep, STEP_MS);
+    clock0 = 0;
+    rafId = window.requestAnimationFrame(frame);
+  }
+
+  function stopRaf() {
+    if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
   }
 
   function openModal() {
+    if (!modal || !canvas || !ctx) { return; }
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
-    fit();                        // must run AFTER .open, while the canvas has a size
-    reset();
-    if (stepTimer) { window.clearInterval(stepTimer); }
-    stepTimer = window.setInterval(step, STEP_MS);
-    if (!rafId) {
-      clock0 = 0;
-      rafId = window.requestAnimationFrame(loop);
-    }
+    reset();          // 1. fresh search state + first terminal lines  (BEFORE any paint)
+    fit();            // 2. size the canvas and paint frame 0
+    startLoops();     // 3. arm the 100 ms stepper + the rAF glow loop
   }
 
   function closeModal() {
+    if (!modal) { return; }
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
-    if (stepTimer) { window.clearInterval(stepTimer); stepTimer = null; }
-    if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
+    stopStepping();   // clearInterval
+    stopRaf();        // cancelAnimationFrame
+    exploring = false;
     clock0 = 0;
   }
 
-  openBtn.addEventListener('click', openModal);
-  closeBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', function (e) { if (e.target === modal) { closeModal(); } });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modal.classList.contains('open')) { closeModal(); }
-  });
-  window.addEventListener('resize', function () {
-    if (modal.classList.contains('open')) { fit(); }
-  });
+  /* ---------------- boot ---------------- */
+  function ready() {
+    modal    = document.getElementById('algoModal');
+    canvas   = document.getElementById('algoCanvas');
+    openBtn  = document.getElementById('algoOpen');
+    closeBtn = document.getElementById('algoClose');
+    statusEl = document.getElementById('algoStatus');
+    termEl   = document.getElementById('algoTerm');
+    if (!modal || !canvas || !openBtn || !closeBtn) { return; }
+    ctx = canvas.getContext('2d');
+    if (!ctx) { return; }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) { closeModal(); } });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modal.classList.contains('open')) { closeModal(); }
+    });
+    window.addEventListener('resize', function () {
+      if (modal.classList.contains('open')) { fit(); }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ready);
+  } else {
+    ready();
+  }
 })();
 </script>
 </body>
