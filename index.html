@@ -481,6 +481,9 @@ html{scroll-behavior:smooth}
     radial-gradient(900px 520px at 50% 0%, rgba(34,211,238,.07), transparent 65%),
     rgba(2,5,10,.88);
   backdrop-filter:blur(4px);
+  /* the dimmed backdrop lets clicks through to #map, so the map stays live
+     while the modal is open (that is what feeds the interrupt listener) */
+  pointer-events:none;
 }
 .algo-modal.open{display:flex}
 .algo-box{
@@ -488,6 +491,7 @@ html{scroll-behavior:smooth}
   background:linear-gradient(180deg,#0b1524,#070d16);
   border:1px solid #1d3350;border-radius:16px;padding:16px;
   box-shadow:0 30px 90px rgba(0,0,0,.75),0 0 0 1px rgba(34,211,238,.06) inset;
+  pointer-events:auto;
 }
 .algo-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .algo-title{
@@ -2962,69 +2966,124 @@ html{scroll-behavior:smooth}
 })();
 
 /* =====================================================================
-   ALGO DEMO MODAL — self-contained A* visualiser + main-map visual sync.
-   Own IIFE scope, own canvas (#algoCanvas), own pseudo-terminal.
+   ALGO DEMO MODAL — A* visualiser + shared-state synchronisation.
 
-   The grid is generated on every open from the LIVE navigation state
-   (window.__teleop.state): obstacles are projected onto the 15x15 grid,
-   the start node follows the robot and the goal node follows the target.
-   This is a read-only visual mapping — the main physics loop, the joystick
-   and the mission state machine are never touched.
+   ARCHITECTURE
+     The modal owns no physical truth. It READS the host's shared state
+     object (window.__teleop.state) and mirrors it onto a 15x15 grid:
+        physicsToGrid(px, py)   continuous metres -> discrete cell indices
+        applyState(st)          obstacles -> walls, pose -> start, target -> goal
+     It also LISTENS on the main map's pointerdown event. A click while the
+     modal is open is an operator interrupt: the commanded velocity is
+     zeroed, the new target is picked up from the shared state, and the A*
+     search is re-run from the robot's current pose.
 
-   FIX kept from Batch 3: the search state is created up front and reset()
-   runs BEFORE the first paint, so no frame can ever read an undefined
-   openList, and both loops are guarded + cleared on close.
+     The ONLY writes into the shared object are the ones the interrupt
+     contract requires (state.vx / state.vy = 0). Everything else goes
+     through the public window.__teleop.setTarget() API. The main renderer
+     (#map), the joystick and the physics loop are never touched.
+
+     The modal backdrop is pointer-events:none so the map underneath stays
+     clickable while the dialog is open.
    ===================================================================== */
 (function () {
   'use strict';
 
   var N = 15;                          // 15 x 15 grid
-  var START = { x: 0, y: 0 };          // top-left  (rewritten by syncFromMain)
-  var GOAL  = { x: N - 1, y: N - 1 };  // bottom-right (rewritten by syncFromMain)
   var STEP_MS = 100;                   // one A* expansion + one terminal line per 100 ms
   var TERM_MAX = 70;                   // terminal scrollback
   var TAU = Math.PI * 2;
 
-  // mirrors the main arena extent, used only to scale world metres -> cells
-  var ARENA_HX = 9.0, ARENA_HY = 5.75;
+  // main arena half-extents + view padding, used only to project coordinates
+  var ARENA_HX = 9.0, ARENA_HY = 5.75, VIEW_PAD = 0.7;
+
+  var START = { x: 0, y: 0 };          // rewritten by applyState()
+  var GOAL  = { x: N - 1, y: N - 1 };  // rewritten by applyState()
 
   var modal = null, canvas = null, ctx = null;
   var openBtn = null, closeBtn = null, statusEl = null, termEl = null;
   var cw = 0, ch = 0, cell = 0, ox = 0, oy = 0, dpr = 1;
   var stepTimer = null, rafId = null, clock = 0, clock0 = 0;
-  var pulse = 0, travel = 0, runNo = 0;
+  var pulse = 0, travel = 0, runNo = 0, mapBound = false;
 
-  // wall set for the current run (rebuilt from the main map on every open)
-  var wallSet = {};
+  var wallSet = {};                    // current wall cells (rebuilt per sync)
 
   // ---- search state: ALWAYS defined, never undefined during a paint ----
   var openList = [];
   var closedSet = {};
   var cameFrom = {};
   var gScore = {};
-  var path = null;
+  var path = null;                     // discrete grid path (cells)
+  var smoothed = null;                 // lerp-smoothed polyline (cells)
+  var arc = null, arcLen = 0;          // the same polyline in pixels + its length
   var solved = false, failed = false, exploring = false;
   var explored = 0, wallHits = 0;
 
-  // what the last sync found (shown in the terminal header)
   var syncInfo = { note: 'source: default corners', walls: 0, hasTarget: false };
 
-  /* ---------------- main-map visual sync (read-only) ---------------- */
-  function clampInt(v, a, b) { v = Math.round(v); return v < a ? a : (v > b ? b : v); }
-  function wx2gx(wx) { return clampInt((wx + ARENA_HX) / (ARENA_HX * 2) * (N - 1), 0, N - 1); }
-  function wy2gy(wy) { return clampInt((wy + ARENA_HY) / (ARENA_HY * 2) * (N - 1), 0, N - 1); }
-
-  function syncFromMain() {
+  /* ==================================================================
+     SHARED STATE ACCESS  (read-only; supports both field shapes)
+     ================================================================== */
+  function sharedState() {
     var T = window.__teleop;
-    var st = (T && T.state) ? T.state : null;
+    return (T && T.state) ? T.state : null;
+  }
+  // robot pose: state.pose.{x,y} if the host uses a pose object, else state.{x,y}
+  function poseOf(st) {
+    if (!st) { return { x: 0, y: 0 }; }
+    if (st.pose && typeof st.pose.x === 'number') { return { x: st.pose.x, y: st.pose.y }; }
+    return { x: st.x || 0, y: st.y || 0 };
+  }
+  // active target: state.target if the host uses one, else state.nav
+  function targetOf(st) {
+    if (!st) { return null; }
+    if (st.target && typeof st.target.x === 'number') {
+      if (st.target.active === false) { return null; }
+      return { x: st.target.x, y: st.target.y };
+    }
+    if (st.nav && st.nav.active) { return { x: st.nav.x, y: st.nav.y }; }
+    return null;
+  }
+
+  /* ==================================================================
+     1. PHYSICS -> GRID MAPPING
+     ================================================================== */
+  function clampInt(v, a, b) { v = Math.round(v); return v < a ? a : (v > b ? b : v); }
+
+  // continuous physics metres -> discrete 15x15 cell index
+  function physicsToGrid(px, py) {
+    return {
+      x: clampInt((px + ARENA_HX) / (ARENA_HX * 2) * (N - 1), 0, N - 1),
+      y: clampInt((py + ARENA_HY) / (ARENA_HY * 2) * (N - 1), 0, N - 1)
+    };
+  }
+
+  // pointer event on #map -> physics metres (mirrors the host view transform)
+  function eventToPhysics(e) {
+    var map = document.getElementById('map');
+    if (!map || !e) { return null; }
+    var r = map.getBoundingClientRect();
+    var w = Math.max(1, map.clientWidth || 1);
+    var h = Math.max(1, map.clientHeight || 1);
+    var sc = Math.max(4, Math.min(w / ((ARENA_HX + VIEW_PAD) * 2),
+                                 h / ((ARENA_HY + VIEW_PAD) * 2)));
+    return {
+      x: ((e.clientX - r.left) - w / 2) / sc,
+      y: ((e.clientY - r.top) - h / 2) / sc
+    };
+  }
+
+  // project the whole shared state onto the grid (obstacles / start / goal)
+  function applyState(st) {
+    st = st || sharedState();
     var cells = [], i, gx, gy, x0, x1, y0, y1, tmp;
 
-    // 1) project every main-map obstacle rectangle onto the 15x15 grid
+    // --- obstacles -> wall cells ---
     if (st && st.obstacles) {
       for (i = 0; i < st.obstacles.length; i++) {
         var o = st.obstacles[i];
-        x0 = wx2gx(o.x0); x1 = wx2gx(o.x1);
-        y0 = wy2gy(o.y0); y1 = wy2gy(o.y1);
+        x0 = physicsToGrid(o.x0, 0).x; x1 = physicsToGrid(o.x1, 0).x;
+        y0 = physicsToGrid(0, o.y0).y; y1 = physicsToGrid(0, o.y1).y;
         if (x1 < x0) { tmp = x0; x0 = x1; x1 = tmp; }
         if (y1 < y0) { tmp = y0; y0 = y1; y1 = tmp; }
         for (gy = y0; gy <= y1; gy++) {
@@ -3033,7 +3092,7 @@ html{scroll-behavior:smooth}
       }
     }
 
-    // 2) 5-8 small obstacles project to very few cells -> thicken once for legibility
+    // 5-8 small obstacles project to very few cells -> thicken once for legibility
     var seen = {}, keys = [];
     for (i = 0; i < cells.length; i++) {
       if (!seen[cells[i]]) { seen[cells[i]] = true; keys.push(cells[i]); }
@@ -3051,20 +3110,23 @@ html{scroll-behavior:smooth}
       }
     }
 
-    // 3) start / goal follow the live navigation state
-    var hasTarget = !!(st && st.nav && st.nav.active);
-    if (hasTarget) {
-      START.x = wx2gx(st.x);     START.y = wy2gy(st.y);
-      GOAL.x  = wx2gx(st.nav.x); GOAL.y  = wy2gy(st.nav.y);
+    // --- start = live pose, goal = live target (or the default corner) ---
+    var pose = poseOf(st);
+    var tgt  = targetOf(st);
+    var sp   = physicsToGrid(pose.x, pose.y);
+    START.x = sp.x; START.y = sp.y;
+
+    if (tgt) {
+      var gp = physicsToGrid(tgt.x, tgt.y);
+      GOAL.x = gp.x; GOAL.y = gp.y;
     } else {
-      START.x = 0; START.y = 0;                 // default corners
-      GOAL.x = N - 1; GOAL.y = N - 1;
+      GOAL.x = N - 1; GOAL.y = N - 1;          // default corners
     }
     if (START.x === GOAL.x && START.y === GOAL.y) {
-      GOAL.x = (GOAL.x + 7) % N;                // never degenerate
+      GOAL.x = (GOAL.x + 7) % N;               // never degenerate
     }
 
-    // 4) commit the wall set, keeping start and goal cells free
+    // --- commit walls, keeping start and goal free ---
     wallSet = {};
     for (i = 0; i < cells.length; i++) {
       var c = cells[i];
@@ -3076,16 +3138,18 @@ html{scroll-behavior:smooth}
     for (kk in wallSet) { if (wallSet[kk]) { n++; } }
 
     syncInfo.walls = n;
-    syncInfo.hasTarget = hasTarget;
-    syncInfo.note = hasTarget
-      ? ('source: live nav state  robot (' + START.x + ',' + START.y + ')  target (' + GOAL.x + ',' + GOAL.y + ')')
+    syncInfo.hasTarget = !!tgt;
+    syncInfo.note = tgt
+      ? ('source: shared state  pose (' + START.x + ',' + START.y + ')  target (' + GOAL.x + ',' + GOAL.y + ')')
       : 'source: no active target — default corners';
     return syncInfo;
   }
 
   function isWall(x, y) { return wallSet[x + ',' + y] === true; }
 
-  /* ---------------- pseudo-terminal ---------------- */
+  /* ==================================================================
+     PSEUDO-TERMINAL
+     ================================================================== */
   function termLine(text, cls) {
     if (!termEl) { return; }
     var d = document.createElement('div');
@@ -3104,7 +3168,7 @@ html{scroll-behavior:smooth}
   function pad(n) { return (n < 10 ? ' ' : '') + n; }
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
-  // mirror a line into the MAIN page event log (DOM-only, no main JS touched)
+  // mirror a line into the MAIN page event log (DOM-only, host JS untouched)
   function mainLog(text) {
     var list = document.getElementById('logList');
     if (!list) { return; }
@@ -3124,14 +3188,17 @@ html{scroll-behavior:smooth}
     list.scrollTop = list.scrollHeight;
   }
 
-  /* ---------------- A* ---------------- */
+  /* ==================================================================
+     A*
+     ================================================================== */
   function reset() {
     openList  = [{ x: START.x, y: START.y }];
     closedSet = {};
     cameFrom  = {};
     gScore    = {};
     gScore[START.x + ',' + START.y] = 0;
-    path = null; solved = false; failed = false; exploring = true;
+    path = null; smoothed = null; arc = null; arcLen = 0;
+    solved = false; failed = false; exploring = true;
     explored = 0; wallHits = 0;
     runNo++;
     termRule('run #' + runNo);
@@ -3154,7 +3221,6 @@ html{scroll-behavior:smooth}
       return;
     }
 
-    // expand the frontier node with the lowest f = g + h
     var bi = 0, bf = Infinity, i, n, f;
     for (i = 0; i < openList.length; i++) {
       n = openList[i];
@@ -3168,7 +3234,6 @@ html{scroll-behavior:smooth}
     termLine('> Opening node (' + pad(cur.x) + ',' + pad(cur.y) + ') | F=' + pad(bf) +
              ' G=' + pad(gScore[ck]) + ' H=' + pad(dist(cur.x, cur.y)), 'info');
 
-    // ---- goal reached: stop stepping, keep painting the glow ----
     if (cur.x === GOAL.x && cur.y === GOAL.y) {
       var p = [], key = ck, parts;
       while (key) {
@@ -3177,10 +3242,14 @@ html{scroll-behavior:smooth}
         key = cameFrom[key];
       }
       p.reverse();
-      path = p; solved = true; exploring = false;
-      termLine('> Path found! Rendering trajectory...', 'ok');
-      termLine('  cost=' + (p.length - 1) + ' steps   nodes=' + explored, 'ok');
-      termLine('> Trajectory complete. Close & reopen to replay.', 'ok');
+      path = p;
+      smoothed = smoothPath(p, 2);      // lerp-smoothed polyline
+      solved = true; exploring = false;
+      buildArc();
+      termLine('> Path found! Smoothing trajectory...', 'ok');
+      termLine('  cost=' + (p.length - 1) + ' steps   nodes=' + explored +
+               '   spline=' + smoothed.length + ' pts', 'ok');
+      termLine('> Differential-drive arc ready. Close & reopen to replay.', 'ok');
       stopStepping();
       return;
     }
@@ -3209,12 +3278,83 @@ html{scroll-behavior:smooth}
     }
   }
 
-  /* ---------------- canvas ---------------- */
+  /* ==================================================================
+     3. PATH SMOOTHING — Chaikin corner cutting, built purely from lerp.
+        The grid gives an orthogonal staircase; two lerp passes plus a
+        quadratic midpoint trace turn it into the continuous arc a
+        differential-drive robot actually draws.
+     ================================================================== */
+  function smoothPath(pts, iterations) {
+    if (!pts || pts.length < 3) { return pts ? pts.slice() : []; }
+    var out = pts, it, i, a, b;
+    for (it = 0; it < iterations; it++) {
+      var next = [out[0]];
+      for (i = 0; i < out.length - 1; i++) {
+        a = out[i]; b = out[i + 1];
+        next.push({ x: a.x + (b.x - a.x) * 0.25, y: a.y + (b.y - a.y) * 0.25 });
+        next.push({ x: a.x + (b.x - a.x) * 0.75, y: a.y + (b.y - a.y) * 0.75 });
+      }
+      next.push(out[out.length - 1]);
+      out = next;
+    }
+    return out;
+  }
+
+  // cell-space smoothed polyline -> pixel-space arc + cumulative length
+  function buildArc() {
+    arc = null; arcLen = 0;
+    if (!smoothed || smoothed.length < 2 || !cell) { return; }
+    arc = [];
+    for (var i = 0; i < smoothed.length; i++) {
+      var p = {
+        x: ox + (smoothed[i].x + 0.5) * cell,
+        y: oy + (smoothed[i].y + 0.5) * cell
+      };
+      if (i > 0) { arcLen += Math.hypot(p.x - arc[i - 1].x, p.y - arc[i - 1].y); }
+      arc.push(p);
+    }
+  }
+
+  // point at fraction t of the arc, walked by arc length (constant speed)
+  function arcPoint(t) {
+    if (!arc || arc.length < 2 || arcLen <= 0) { return null; }
+    var d = t * arcLen, acc = 0, i, seg, fr;
+    for (i = 1; i < arc.length; i++) {
+      seg = Math.hypot(arc[i].x - arc[i - 1].x, arc[i].y - arc[i - 1].y);
+      if (acc + seg >= d) {
+        fr = seg > 0 ? (d - acc) / seg : 0;
+        return {
+          x: arc[i - 1].x + (arc[i].x - arc[i - 1].x) * fr,
+          y: arc[i - 1].y + (arc[i].y - arc[i - 1].y) * fr
+        };
+      }
+      acc += seg;
+    }
+    return { x: arc[arc.length - 1].x, y: arc[arc.length - 1].y };
+  }
+
+  // trace the smoothed polyline as a continuous curve (quadratic midpoints)
+  function smoothTrace(pts) {
+    var i, mx, my;
+    ctx.beginPath();
+    ctx.moveTo(ox + (pts[0].x + 0.5) * cell, oy + (pts[0].y + 0.5) * cell);
+    for (i = 1; i < pts.length - 1; i++) {
+      mx = ox + ((pts[i].x + pts[i + 1].x) / 2 + 0.5) * cell;
+      my = oy + ((pts[i].y + pts[i + 1].y) / 2 + 0.5) * cell;
+      ctx.quadraticCurveTo(ox + (pts[i].x + 0.5) * cell, oy + (pts[i].y + 0.5) * cell, mx, my);
+    }
+    ctx.lineTo(ox + (pts[pts.length - 1].x + 0.5) * cell,
+               oy + (pts[pts.length - 1].y + 0.5) * cell);
+  }
+
+  /* ==================================================================
+     CANVAS
+     ================================================================== */
   function fit() {
     if (!canvas || !ctx) { return; }
     var w = Math.max(1, Math.round(canvas.clientWidth || 1));
     var h = Math.round(canvas.clientHeight || 0);
-    if (h <= 1) { h = w; }                       // fallback if aspect-ratio is unsupported
+    if (h <= 1) { h = w; }
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
@@ -3223,21 +3363,8 @@ html{scroll-behavior:smooth}
     cell = Math.floor(Math.min(cw, ch) / N) || 1;
     ox = (cw - cell * N) / 2;
     oy = (ch - cell * N) / 2;
+    buildArc();
     draw();
-  }
-
-  // point along the solved path, t in 0..1 (the travelling light)
-  function pathPoint(t) {
-    if (!path || path.length < 2) { return null; }
-    var segs = path.length - 1;
-    var f = t * segs;
-    var i = Math.min(segs - 1, Math.floor(f));
-    var frac = f - i;
-    var a = path[i], b = path[i + 1];
-    return {
-      x: ox + (a.x + (b.x - a.x) * frac + 0.5) * cell,
-      y: oy + (a.y + (b.y - a.y) * frac + 0.5) * cell
-    };
   }
 
   function draw() {
@@ -3260,7 +3387,7 @@ html{scroll-behavior:smooth}
     }
     ctx.stroke();
 
-    // closed list (batched, dark blue, no glow)
+    // closed list (batched, dark blue)
     ctx.beginPath();
     for (y = 0; y < N; y++) {
       for (x = 0; x < N; x++) {
@@ -3271,7 +3398,7 @@ html{scroll-behavior:smooth}
     ctx.fillStyle = 'rgba(23,42,92,.85)';
     ctx.fill();
 
-    // obstacles (batched, purple) — these are the main map's obstacles
+    // obstacles projected from the main map
     ctx.beginPath();
     for (y = 0; y < N; y++) {
       for (x = 0; x < N; x++) {
@@ -3306,8 +3433,8 @@ html{scroll-behavior:smooth}
     ctx.fill();
     ctx.restore();
 
-    // solved path: thick glowing cyan line + travelling light
-    if (path && path.length > 1) {
+    // ---- smoothed trajectory: one continuous glowing arc ----
+    if (smoothed && smoothed.length > 1) {
       ctx.save();
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
@@ -3315,16 +3442,21 @@ html{scroll-behavior:smooth}
       ctx.shadowBlur = 18;
       ctx.strokeStyle = 'rgba(103,232,249,.95)';
       ctx.lineWidth = Math.max(3, cell * 0.26);
-      ctx.beginPath();
-      for (i = 0; i < path.length; i++) {
-        px = ox + (path[i].x + 0.5) * cell;
-        py = oy + (path[i].y + 0.5) * cell;
-        if (i === 0) { ctx.moveTo(px, py); } else { ctx.lineTo(px, py); }
-      }
+      smoothTrace(smoothed);
       ctx.stroke();
       ctx.restore();
 
-      var pt = pathPoint(travel);
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(224,255,255,.55)';
+      ctx.lineWidth = Math.max(1, cell * 0.07);
+      smoothTrace(smoothed);
+      ctx.stroke();
+      ctx.restore();
+
+      // travelling light, constant speed along the arc
+      var pt = arcPoint(travel);
       if (pt) {
         var g2 = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, cell * 0.95);
         g2.addColorStop(0, 'rgba(255,255,255,.95)');
@@ -3337,7 +3469,7 @@ html{scroll-behavior:smooth}
       }
     }
 
-    // start node: neon cyan disc (mapped from the robot pose)
+    // start node: neon cyan disc (mapped from the live pose)
     sx = ox + (START.x + 0.5) * cell;
     sy = oy + (START.y + 0.5) * cell;
     ctx.save();
@@ -3350,7 +3482,7 @@ html{scroll-behavior:smooth}
     ctx.beginPath(); ctx.arc(sx, sy, cell * 0.16, 0, TAU); ctx.fill();
     ctx.restore();
 
-    // goal node: magenta crosshair with rotating ticks (mapped from the target)
+    // goal node: magenta crosshair (mapped from the live target)
     gx = ox + (GOAL.x + 0.5) * cell;
     gy = oy + (GOAL.y + 0.5) * cell;
     ctx.save();
@@ -3379,24 +3511,26 @@ html{scroll-behavior:smooth}
     }
     ctx.restore();
 
-    // status line (null-safe)
     if (statusEl) {
       if (failed) { statusEl.textContent = '无解 No path found'; }
-      else if (solved) { statusEl.textContent = '路径 Path: ' + Math.max(0, (path ? path.length : 1) - 1) + ' 步 steps | 已探索 Explored: ' + explored; }
+      else if (solved) { statusEl.textContent = '路径 Path: ' + Math.max(0, (path ? path.length : 1) - 1) + ' 步 steps | 平滑 Smooth: ' + (smoothed ? smoothed.length : 0) + ' pts | 已探索 Explored: ' + explored; }
       else { statusEl.textContent = '待探索 Open: ' + (openList ? openList.length : 0) + ' | 已探索 Explored: ' + explored + ' | f = g + h'; }
     }
   }
 
-  /* ---------------- loops ---------------- */
+  /* ==================================================================
+     LOOPS
+     ================================================================== */
   function safeStep() {
     try { step(); }
     catch (err) { exploring = false; stopStepping(); if (window.console) { window.console.warn('[algo] step failed', err); } }
   }
-
   function stopStepping() {
     if (stepTimer) { window.clearInterval(stepTimer); stepTimer = null; }
   }
-
+  function stopRaf() {
+    if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
+  }
   function frame(ts) {
     try {
       if (!clock0) { clock0 = ts; }
@@ -3407,9 +3541,8 @@ html{scroll-behavior:smooth}
     } catch (err) {
       if (window.console) { window.console.warn('[algo] draw failed', err); }
     }
-    rafId = window.requestAnimationFrame(frame);   // keep the visual loop alive
+    rafId = window.requestAnimationFrame(frame);
   }
-
   function startLoops() {
     stopStepping();
     stopRaf();
@@ -3418,18 +3551,63 @@ html{scroll-behavior:smooth}
     rafId = window.requestAnimationFrame(frame);
   }
 
-  function stopRaf() {
-    if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
+  /* ==================================================================
+     2. INTERRUPT — the main map was clicked while the modal is open
+     ================================================================== */
+  function rerun(reasonKey) {
+    applyState(sharedState());
+    reset();                 // state before paint (see the Batch-3 fix)
+    if (reasonKey) { termLine(reasonKey, 'warn'); }
+    fit();
+    startLoops();
   }
 
+  function interruptTo(physicsPoint) {
+    var st = sharedState();
+    if (!st) { return; }
+
+    // (a) emergency interrupt: zero the commanded velocity
+    st.vx = 0;
+    if (typeof st.vy === 'number') { st.vy = 0; }
+
+    // (b) new target: normally the host's own map handler already stored it.
+    //     If it did not (listener order / no host handler), set it through the
+    //     same public API the map click uses.
+    var tgt = targetOf(st);
+    if (!tgt && physicsPoint && window.__teleop && typeof window.__teleop.setTarget === 'function') {
+      window.__teleop.setTarget(physicsPoint.x, physicsPoint.y, false);
+      st = sharedState();
+      tgt = targetOf(st);
+    }
+    if (!tgt) { return; }
+
+    // (c) + (d) remap start/goal and re-run the entire search
+    rerun('> [SYS] Interrupt detected. Re-routing from current pose...');
+
+    // (e) mirror it into the main page log as well
+    mainLog('> [SYS] Re-planning from (' + START.x + ',' + START.y + ') to (' + GOAL.x + ',' + GOAL.y + ')');
+  }
+
+  function onMapPointerDown(e) {
+    if (!modal || !modal.classList.contains('open')) { return; }
+    if (e && e.button !== 0 && e.pointerType === 'mouse') { return; }
+    var st = sharedState();
+    if (!st || st.estop) { return; }              // E-STOP swallows map clicks
+    interruptTo(eventToPhysics(e));
+  }
+
+  /* ==================================================================
+     OPEN / CLOSE
+     ================================================================== */
   function openModal() {
     if (!modal || !canvas || !ctx) { return; }
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
-    syncFromMain();   // 1. project the live navigation state onto the grid
-    reset();          // 2. fresh search state + terminal header
-    fit();            // 3. size the canvas and paint frame 0
-    startLoops();     // 4. auto-play: 100 ms stepper + the rAF glow loop
+    applyState(sharedState());   // 1. project the shared state
+    reset();                     // 2. fresh search + terminal header
+    fit();                       // 3. size + paint frame 0
+    startLoops();                // 4. auto-play
+    termLine('> tip: click the main map to interrupt & re-route', 'dim');
     mainLog('> [ALGO] Visualization attached · ' + syncInfo.note);
   }
 
@@ -3438,14 +3616,16 @@ html{scroll-behavior:smooth}
     var wasOpen = modal.classList.contains('open');
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
-    stopStepping();   // clearInterval
-    stopRaf();        // cancelAnimationFrame
+    stopStepping();
+    stopRaf();
     exploring = false;
     clock0 = 0;
     if (wasOpen) { mainLog('> [ALGO] Visualization detached.'); }
   }
 
-  /* ---------------- boot ---------------- */
+  /* ==================================================================
+     BOOT
+     ================================================================== */
   function ready() {
     modal    = document.getElementById('algoModal');
     canvas   = document.getElementById('algoCanvas');
@@ -3459,13 +3639,20 @@ html{scroll-behavior:smooth}
 
     openBtn.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', function (e) { if (e.target === modal) { closeModal(); } });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && modal.classList.contains('open')) { closeModal(); }
     });
     window.addEventListener('resize', function () {
       if (modal.classList.contains('open')) { fit(); }
     });
+
+    // listen on the main map: the host's own handler runs first (it was
+    // registered earlier), so the shared target is already up to date here
+    var map = document.getElementById('map');
+    if (map && !mapBound) {
+      mapBound = true;
+      map.addEventListener('pointerdown', onMapPointerDown);
+    }
   }
 
   if (document.readyState === 'loading') {
