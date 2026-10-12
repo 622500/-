@@ -9,20 +9,36 @@
    DESIGN TOKENS
    ===================================================================== */
 :root{
-  --bg:#05080e;
-  --panel:#0b1421;
-  --panel-2:#0e1a2b;
-  --line:#1b2a41;
-  --line-soft:#152238;
-  --txt:#dbeafe;
-  --dim:#7f96b8;
-  --dim-2:#5b7093;
-  --cyan:#22d3ee;
-  --cyan-soft:rgba(34,211,238,.14);
-  --green:#34d399;
-  --amber:#fbbf24;
-  --red:#f87171;
-  --violet:#a78bfa;
+  /* ===== scientific aesthetic : surfaces ===== */
+  --bg:#0D1016;
+  --panel:#141821;
+  --panel-2:#1A202A;
+  --line:#242A36;
+  --line-soft:#1E232D;
+  --txt:#E6E8EB;
+  --dim:#8A919E;
+  --dim-2:#6B7280;
+  /* ===== semantic accents ===== */
+  --accent:#3B82F6;
+  --warn:#F59E0B;
+  --danger:#EF4444;
+  --success:#10B981;
+  --accent-2:#60A5FA;
+  --accent-2-rgb:96,165,250;
+  --accent-soft:rgba(var(--accent-rgb),.14);
+  /* ===== rgb triples for translucent washes ===== */
+  --bg-rgb:13,16,22;
+  --panel-rgb:20,24,33;
+  --line-rgb:36,42,54;
+  --txt-rgb:230,232,235;
+  --dim-rgb:138,145,158;
+  --accent-rgb:59,130,246;
+  --warn-rgb:245,158,11;
+  --danger-rgb:239,68,68;
+  --success-rgb:16,185,129;
+  /* ===== geometry / motion ===== */
+  --radius:6px;
+  --joy:150px;          /* joystick base diameter - knob and ring derive from it */
   --drawer-w:24px;
   --drawer-open:260px;
   --ease:cubic-bezier(.4,0,.2,1);
@@ -32,10 +48,7 @@
 html,body{height:100%}
 body{
   margin:0;
-  background:
-    radial-gradient(1200px 700px at 20% -10%, #0d1c30 0%, transparent 60%),
-    radial-gradient(900px 600px at 100% 110%, #0a1a24 0%, transparent 55%),
-    var(--bg);
+  background:var(--bg);
   color:var(--txt);
   font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
   font-size:14px;
@@ -46,7 +59,7 @@ h1,h2,h3,p,ul,li{margin:0;padding:0}
 ul{list-style:none}
 button,input{font:inherit;color:inherit}
 ::-webkit-scrollbar{width:8px;height:8px}
-::-webkit-scrollbar-thumb{background:#1e3050;border-radius:8px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:var(--radius)}
 ::-webkit-scrollbar-track{background:transparent}
 
 /* =====================================================================
@@ -57,11 +70,11 @@ button,input{font:inherit;color:inherit}
 .col-left{border-right:1px solid var(--line)}
 .col-main{
   flex:1 1 auto;min-width:0;min-height:0;
-  display:flex;flex-direction:column;gap:12px;
-  padding:14px 14px 14px 34px;
+  display:flex;flex-direction:column;gap:10px;
+  padding:12px 14px 12px 34px;
   overflow-y:auto;overflow-x:hidden;
 }
-.col-right .col-main{padding:14px 34px 14px 14px}
+.col-right .col-main{padding:12px 34px 12px 14px}
 
 /* ---------- column header ---------- */
 .col-head{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
@@ -71,32 +84,31 @@ button,input{font:inherit;color:inherit}
 
 .chip{
   font-family:var(--mono);font-size:11px;letter-spacing:.08em;
-  padding:4px 9px;border-radius:999px;border:1px solid var(--line);
-  background:#0a1320;color:var(--dim);white-space:nowrap;
+  padding:4px 9px;border-radius:var(--radius);border:1px solid var(--line);
+  background:var(--panel);color:var(--dim);white-space:nowrap;
 }
 .chip.mode-idle{color:var(--dim)}
-.chip.mode-manual{color:var(--cyan);border-color:rgba(34,211,238,.4);background:rgba(34,211,238,.08)}
-.chip.mode-auto{color:var(--amber);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.08)}
-.chip.mode-estop{color:var(--red);border-color:rgba(248,113,113,.5);background:rgba(248,113,113,.1);animation:blink 1s steps(2,end) infinite}
-.chip.warn{color:var(--amber);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)}
-.chip.danger{color:#fff;border-color:rgba(248,113,113,.75);background:rgba(248,113,113,.28);animation:blink .8s steps(2,end) infinite}
+.chip.mode-manual{color:var(--accent);border-color:rgba(var(--accent-rgb),.4);background:rgba(var(--accent-rgb),.08)}
+.chip.mode-auto{color:var(--warn);border-color:rgba(var(--warn-rgb),.4);background:rgba(var(--warn-rgb),.08)}
+.chip.mode-estop{color:var(--danger);border-color:rgba(var(--danger-rgb),.5);background:rgba(var(--danger-rgb),.1);animation:blink 1s steps(2,end) infinite}
+.chip.warn{color:var(--warn);border-color:rgba(var(--warn-rgb),.45);background:rgba(var(--warn-rgb),.1)}
+.chip.danger{color:var(--txt);border-color:rgba(var(--danger-rgb),.75);background:rgba(var(--danger-rgb),.28);animation:blink .8s steps(2,end) infinite}
 @keyframes blink{50%{opacity:.45}}
 
 /* ---------- mission state machine (Batch 3) ---------- */
 .mission{
   display:flex;align-items:center;gap:10px;
-  padding:10px 12px;border-radius:12px;
+  padding:10px 12px;border-radius:var(--radius);
   border:1px solid var(--line);border-left:3px solid var(--ms);
-  background:linear-gradient(180deg,#0e1a2b,#0a1320);
-  --ms:#5b7093;
+  background:var(--panel);
+  --ms:var(--dim);
   transition:border-color .2s,box-shadow .2s;
 }
-.mission.ms-idle{--ms:#5b7093}
-.mission.ms-cruising{--ms:#22d3ee}
-.mission.ms-inspecting{--ms:#a78bfa}
-.mission.ms-clearing{--ms:#fbbf24}
-.mission.ms-returning{--ms:#34d399}
-.mission.ms-clearing{box-shadow:0 0 0 1px rgba(251,191,36,.25),0 0 22px rgba(251,191,36,.12) inset}
+.mission.ms-idle{--ms:var(--dim)}
+.mission.ms-cruising{--ms:var(--accent)}
+.mission.ms-inspecting{--ms:var(--accent-2)}
+.mission.ms-clearing{--ms:var(--warn)}
+.mission.ms-returning{--ms:var(--success)}
 .mission-tag{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
 .mission-state{
   font-family:var(--mono);font-size:15px;font-weight:700;
@@ -104,34 +116,34 @@ button,input{font:inherit;color:inherit}
 }
 .mission.ms-clearing .mission-state{animation:blink .9s steps(2,end) infinite}
 .mission-dots{margin-left:auto;display:flex;gap:5px}
-.mission-dots i{width:16px;height:4px;border-radius:2px;background:#1b2a41;transition:background .2s,box-shadow .2s}
-.mission-dots i.on{background:var(--ms);box-shadow:0 0 8px var(--ms)}
+.mission-dots i{width:16px;height:4px;border-radius:2px;background:var(--line);transition:background .2s,box-shadow .2s}
+.mission-dots i.on{background:var(--ms)}
 
-.chip.ms-cruising{color:#22d3ee;border-color:rgba(34,211,238,.45);background:rgba(34,211,238,.08)}
-.chip.ms-inspecting{color:#a78bfa;border-color:rgba(167,139,250,.45);background:rgba(167,139,250,.08)}
-.chip.ms-clearing{color:#fbbf24;border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.1);animation:blink .9s steps(2,end) infinite}
-.chip.ms-returning{color:#34d399;border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.08)}
+.chip.ms-cruising{color:var(--accent);border-color:rgba(var(--accent-rgb),.45);background:rgba(var(--accent-rgb),.08)}
+.chip.ms-inspecting{color:var(--accent-2);border-color:rgba(var(--accent-2-rgb),.55);background:rgba(var(--accent-2-rgb),.10)}
+.chip.ms-clearing{color:var(--warn);border-color:rgba(var(--warn-rgb),.5);background:rgba(var(--warn-rgb),.1);animation:blink .9s steps(2,end) infinite}
+.chip.ms-returning{color:var(--success);border-color:rgba(var(--success-rgb),.45);background:rgba(var(--success-rgb),.08)}
 
-.btn-clear{grid-column:1 / -1;color:#d7f7ff;border-color:rgba(34,211,238,.35)}
-.btn-clear.is-armed{color:var(--amber);border-color:rgba(251,191,36,.6);background:rgba(251,191,36,.08);box-shadow:0 0 0 3px rgba(251,191,36,.1)}
+.btn-clear{grid-column:1 / -1;color:var(--txt);border-color:rgba(var(--accent-rgb),.35)}
+.btn-clear.is-armed{color:var(--warn);border-color:rgba(var(--warn-rgb),.6);background:rgba(var(--warn-rgb),.08);box-shadow:0 0 0 3px rgba(var(--warn-rgb),.1)}
 .btn-clear:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
 .drawer-sub{
   font-size:10.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim-2);
   margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--line-soft);
 }
-#cpuBar{background:linear-gradient(90deg,#fbbf24,#f59e0b)}
-#gpuBar{background:linear-gradient(90deg,#a78bfa,#8b5cf6)}
+#cpuBar{background:var(--warn)}
+#gpuBar{background:var(--accent)}
 
 /* ---------- language toggle (top-right corner) ---------- */
 .lang-btn{
   display:inline-flex;align-items:center;gap:6px;
-  padding:6px 12px;border-radius:9px;cursor:pointer;
-  background:linear-gradient(180deg,#12253c,#0c1728);
-  border:1px solid #24405f;color:var(--cyan);
+  padding:6px 12px;border-radius:var(--radius);cursor:pointer;
+  background:var(--panel-2);
+  border:1px solid var(--line);color:var(--accent);
   font-weight:650;font-size:12px;letter-spacing:.05em;
   transition:border-color .18s,box-shadow .18s,transform .12s;
 }
-.lang-btn:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+.lang-btn:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .lang-btn:active{transform:translateY(1px)}
 
 /* =====================================================================
@@ -139,7 +151,7 @@ button,input{font:inherit;color:inherit}
    ===================================================================== */
 .drawer{
   position:absolute;top:0;bottom:0;width:var(--drawer-w);
-  background:linear-gradient(180deg,#0d1826,#0a1220);
+  background:var(--panel);
   overflow:hidden;z-index:30;
   transition:width .3s var(--ease),box-shadow .3s var(--ease);
   -webkit-tap-highlight-color:transparent;
@@ -157,7 +169,7 @@ button,input{font:inherit;color:inherit}
 }
 .drawer-label::after{
   content:"";width:2px;height:26px;border-radius:2px;
-  background:linear-gradient(180deg,transparent,var(--cyan),transparent);
+  background:var(--accent);
   opacity:.5;
   margin-top:8px;
 }
@@ -175,7 +187,7 @@ button,input{font:inherit;color:inherit}
 
 .drawer.open,.drawer:hover{
   width:var(--drawer-open);
-  box-shadow:0 0 0 1px rgba(34,211,238,.16),0 22px 46px rgba(0,0,0,.6);
+  box-shadow:0 22px 46px rgba(var(--bg-rgb),.6);
 }
 .drawer.open .drawer-body,.drawer:hover .drawer-body{opacity:1;pointer-events:auto;transition-delay:.07s}
 .drawer.open .drawer-label,.drawer:hover .drawer-label{opacity:0}
@@ -191,40 +203,40 @@ button,input{font:inherit;color:inherit}
 
 .drawer-title{
   font-size:11px;text-transform:uppercase;letter-spacing:.14em;
-  color:var(--cyan);margin-bottom:12px;padding-bottom:8px;
+  color:var(--accent);margin-bottom:12px;padding-bottom:8px;
   border-bottom:1px solid var(--line-soft);
 }
 
 /* ---------- fields ---------- */
 .field{display:block;margin-bottom:13px}
 .field-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px}
-.field-top b{font-size:11.5px;font-weight:550;color:#c3d5ee;letter-spacing:.02em}
-.field-top i{font-family:var(--mono);font-style:normal;font-size:11px;color:var(--cyan)}
+.field-top b{font-size:11.5px;font-weight:550;color:var(--txt);letter-spacing:.02em}
+.field-top i{font-family:var(--mono);font-style:normal;font-size:11px;color:var(--accent)}
 input[type=range]{
   -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:4px;
-  background:#16273d;outline:none;
+  background:var(--line-soft);outline:none;
 }
 input[type=range]::-webkit-slider-thumb{
   -webkit-appearance:none;appearance:none;width:15px;height:15px;border-radius:50%;
-  background:radial-gradient(circle at 35% 30%,#9df3ff,var(--cyan));
-  border:1px solid #0a1622;cursor:pointer;box-shadow:0 0 0 3px rgba(34,211,238,.12);
+  background:var(--accent);
+  border:1px solid var(--bg);cursor:pointer;box-shadow:0 0 0 3px rgba(var(--accent-rgb),.12);
 }
 input[type=range]::-moz-range-thumb{
-  width:14px;height:14px;border-radius:50%;background:var(--cyan);
-  border:1px solid #0a1622;cursor:pointer;
+  width:14px;height:14px;border-radius:50%;background:var(--accent);
+  border:1px solid var(--bg);cursor:pointer;
 }
 .toggles{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:4px 0 14px}
 .tg{
   display:flex;align-items:center;gap:7px;cursor:pointer;
-  font-size:11.5px;color:#c3d5ee;padding:6px 7px;border-radius:8px;
-  border:1px solid var(--line-soft);background:#0a1320;
+  font-size:11.5px;color:var(--txt);padding:6px 7px;border-radius:var(--radius);
+  border:1px solid var(--line-soft);background:var(--panel);
 }
-.tg input{accent-color:var(--cyan);width:14px;height:14px;cursor:pointer}
+.tg input{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}
 input.txt{
-  width:100%;padding:7px 9px;border-radius:8px;
-  background:#081120;border:1px solid var(--line);outline:none;font-size:12.5px;
+  width:100%;padding:7px 9px;border-radius:var(--radius);
+  background:var(--bg);border:1px solid var(--line);outline:none;font-size:12.5px;
 }
-input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+input.txt:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .stack{display:flex;flex-direction:column;gap:8px}
 
 /* =====================================================================
@@ -232,38 +244,36 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
    ===================================================================== */
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  padding:11px 10px;border-radius:11px;cursor:pointer;
-  background:linear-gradient(180deg,#12233a,#0b1524);
+  padding:11px 10px;border-radius:var(--radius);cursor:pointer;
+  background:var(--panel-2);
   border:1px solid var(--line);color:var(--txt);
   font-size:12.5px;font-weight:600;letter-spacing:.03em;
   transition:transform .1s,border-color .18s,box-shadow .18s,background .18s,color .18s;
   -webkit-tap-highlight-color:transparent;
 }
 .btn svg{width:17px;height:17px;flex:0 0 auto}
-.btn:hover{border-color:#2d4a6d}
+.btn:hover{border-color:var(--line)}
 .btn:active{transform:translateY(1px) scale(.99)}
-.btn.ghost{width:100%;background:#0a1320;font-weight:550;padding:9px}
+.btn.ghost{width:100%;background:var(--panel);font-weight:550;padding:9px}
 
-.btn-estop{color:#ffd9d9;border-color:rgba(248,113,113,.42);background:linear-gradient(180deg,#2a1216,#1a0c10)}
-.btn-estop:hover{border-color:var(--red);box-shadow:0 0 0 3px rgba(248,113,113,.12)}
+.btn-estop{color:var(--txt);border-color:rgba(var(--danger-rgb),.42);background:var(--panel-2)}
+.btn-estop:hover{border-color:var(--danger);box-shadow:0 0 0 3px rgba(var(--danger-rgb),.12)}
 .btn-estop.is-active{
-  color:#fff;background:linear-gradient(180deg,#e0303a,#8f1119);border-color:#ff9a9a;
-  box-shadow:0 0 22px rgba(248,113,113,.55);animation:estopPulse 1.15s infinite;
+  color:var(--txt);background:var(--danger);border-color:var(--danger);
 }
-@keyframes estopPulse{50%{box-shadow:0 0 6px rgba(248,113,113,.35)}}
 
-.btn-hold.is-active{color:var(--amber);border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.1)}
-.btn-slow.is-active{color:var(--green);border-color:rgba(52,211,153,.5);background:rgba(52,211,153,.1);box-shadow:0 0 0 3px rgba(52,211,153,.1)}
+.btn-hold.is-active{color:var(--warn);border-color:rgba(var(--warn-rgb),.5);background:rgba(var(--warn-rgb),.1)}
+.btn-slow.is-active{color:var(--success);border-color:rgba(var(--success-rgb),.5);background:rgba(var(--success-rgb),.1);box-shadow:0 0 0 3px rgba(var(--success-rgb),.1)}
 
 /* =====================================================================
    CARDS
    ===================================================================== */
 .card{
-  background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));
-  border:1px solid var(--line);border-radius:14px;padding:13px;
+  background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:13px;
   transition:border-color .2s,box-shadow .2s;
 }
-.card.locked{border-color:rgba(248,113,113,.55);box-shadow:0 0 0 1px rgba(248,113,113,.18),0 0 26px rgba(248,113,113,.12) inset}
+.card.locked{border-color:rgba(var(--danger-rgb),.55)}
 .card-title{
   display:flex;align-items:center;gap:8px;
   font-size:11px;text-transform:uppercase;letter-spacing:.13em;color:var(--dim);
@@ -274,36 +284,36 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 /* ---------- joystick ---------- */
 .joy-wrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .joy-base{
-  position:relative;width:178px;height:178px;flex:0 0 auto;border-radius:50%;
+  position:relative;width:var(--joy);height:var(--joy);flex:0 0 auto;border-radius:50%;
   background:
-    radial-gradient(circle at 50% 50%,#0e1c2e 0%,#091320 72%,#070e19 100%);
+    var(--panel-2);
   border:1px solid var(--line);
-  box-shadow:inset 0 0 34px rgba(34,211,238,.07),0 10px 26px rgba(0,0,0,.4);
+  box-shadow:0 10px 26px rgba(var(--bg-rgb),.4);
   touch-action:none;user-select:none;cursor:grab;overflow:hidden;
 }
 .joy-base.grabbing{cursor:grabbing}
 .joy-base.locked{opacity:.42;filter:grayscale(.75);cursor:not-allowed}
-.joy-ring{position:absolute;inset:26px;border-radius:50%;border:1px dashed rgba(127,150,184,.3)}
+.joy-ring{position:absolute;inset:calc(var(--joy) * 0.146);border-radius:50%;border:1px dashed rgba(var(--dim-rgb),.3)}
 .joy-cross,.joy-cross::before{
-  position:absolute;left:50%;top:50%;background:rgba(127,150,184,.18);
+  position:absolute;left:50%;top:50%;background:rgba(var(--dim-rgb),.18);
 }
 .joy-cross{width:1px;height:78%;transform:translate(-50%,-50%)}
 .joy-cross::before{content:"";width:78%;height:1px;left:50%;top:50%;transform:translate(-50%,-50%)}
 .joy-knob{
-  position:absolute;left:50%;top:50%;width:62px;height:62px;margin:-31px 0 0 -31px;
+  position:absolute;left:50%;top:50%;width:calc(var(--joy) * 0.348);height:calc(var(--joy) * 0.348);margin:calc(var(--joy) * -0.174) 0 0 calc(var(--joy) * -0.174);
   border-radius:50%;
-  background:radial-gradient(circle at 36% 30%,#3ee9ff,#0e7f9c 68%,#0a5f77);
-  border:1px solid #7ee9ff;
-  box-shadow:0 6px 16px rgba(0,0,0,.5),0 0 18px rgba(34,211,238,.35);
+  background:var(--accent);
+  border:1px solid var(--accent);
+  box-shadow:0 6px 16px rgba(var(--bg-rgb),.5);
   will-change:transform;
 }
-.joy-base.locked .joy-knob{background:radial-gradient(circle at 36% 30%,#6b7a8d,#33414f);border-color:#5c6a7c;box-shadow:none}
+.joy-base.locked .joy-knob{background:var(--dim-2);border-color:var(--dim-2);box-shadow:none}
 .joy-vector{min-width:118px;flex:1 1 118px}
 .vrow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .vrow span{font-size:10.5px;color:var(--dim);width:52px;letter-spacing:.08em;text-transform:uppercase}
-.vrow b{font-family:var(--mono);font-size:12px;color:var(--cyan);width:46px;text-align:right}
-.vbar{position:relative;flex:1;height:6px;border-radius:4px;background:#122032;overflow:hidden}
-.vbar i{position:absolute;top:0;bottom:0;left:50%;width:0;background:var(--cyan);border-radius:4px;transition:width .08s linear}
+.vrow b{font-family:var(--mono);font-size:12px;color:var(--accent);width:46px;text-align:right}
+.vbar{position:relative;flex:1;height:6px;border-radius:4px;background:var(--line-soft);overflow:hidden}
+.vbar i{position:absolute;top:0;bottom:0;left:50%;width:0;background:var(--accent);border-radius:4px;transition:width .08s linear}
 .joy-tip{font-size:11px;color:var(--dim-2);line-height:1.5;margin-top:10px}
 
 /* ---------- actions ---------- */
@@ -314,53 +324,160 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   font-family:var(--mono);font-size:11.5px;line-height:1.55;
   max-height:152px;overflow-y:auto;
 }
-.log-item{display:flex;gap:9px;padding:3px 0;border-bottom:1px dashed rgba(27,42,65,.5)}
+.log-item{display:flex;gap:9px;padding:3px 0;border-bottom:1px dashed rgba(var(--line-rgb),.5)}
 .log-item:last-child{border-bottom:0}
 .log-time{color:var(--dim-2);flex:0 0 auto}
 .log-text{word-break:break-word}
-.log-info{color:#b9cfe8}
-.log-warn{color:var(--amber)}
-.log-danger{color:var(--red)}
-.log-ok{color:var(--green)}
+.log-info{color:var(--txt)}
+.log-warn{color:var(--warn)}
+.log-danger{color:var(--danger)}
+.log-ok{color:var(--success)}
 
 /* =====================================================================
    CANVAS / GLOBAL VIEW
    ===================================================================== */
 .canvas-wrap{
-  position:relative;flex:1 1 auto;min-height:280px;
-  border:1px solid var(--line);border-radius:14px;overflow:hidden;
-  background:#060a11;box-shadow:inset 0 0 60px rgba(0,0,0,.55);
+  position:relative;flex:0 1 auto;
+  height:50vh;max-height:50vh;min-height:160px;
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  background:var(--bg);
 }
+/* single-screen dashboard: cap chart heights so PID + sensor-filter
+   panels stay above the fold. Overrides the inline height:92px. */
+#telemetry-speed,#telemetry-clearance,#pidCanvas,#filterCanvas{height:76px !important}
 #map{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
 .hud{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
-.hud .chip{background:rgba(6,12,20,.72);backdrop-filter:blur(4px)}
+.hud .chip{background:rgba(var(--bg-rgb),.72);backdrop-filter:blur(4px)}
 .canvas-hint{
   position:absolute;left:10px;bottom:10px;pointer-events:none;
-  font-size:11px;color:var(--dim-2);background:rgba(6,12,20,.66);
-  padding:4px 9px;border-radius:8px;border:1px solid var(--line-soft);
+  font-size:11px;color:var(--dim-2);background:rgba(var(--bg-rgb),.66);
+  padding:4px 9px;border-radius:var(--radius);border:1px solid var(--line-soft);
 }
-.canvas-hint.estop{color:var(--red);border-color:rgba(248,113,113,.4)}
+.canvas-hint.estop{color:var(--danger);border-color:rgba(var(--danger-rgb),.4)}
 .legend{
   position:absolute;right:10px;bottom:10px;pointer-events:none;
   display:flex;gap:10px;flex-wrap:wrap;
-  font-size:10.5px;color:var(--dim-2);background:rgba(6,12,20,.66);
-  padding:4px 9px;border-radius:8px;border:1px solid var(--line-soft);
+  font-size:10.5px;color:var(--dim-2);background:rgba(var(--bg-rgb),.66);
+  padding:4px 9px;border-radius:var(--radius);border:1px solid var(--line-soft);
 }
 .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
 
 /* ---------- sensor rows ---------- */
 .kv{
   display:flex;align-items:baseline;justify-content:space-between;gap:10px;
-  padding:6px 0;border-bottom:1px dashed rgba(27,42,65,.55);font-size:12px;
+  padding:6px 0;border-bottom:1px dashed rgba(var(--line-rgb),.55);font-size:12px;
 }
 .kv:last-child{border-bottom:0}
 .kv span{color:var(--dim);font-size:11.5px}
-.kv b{font-family:var(--mono);font-weight:550;color:#cfe4ff;font-size:12px}
-.kv b.ok{color:var(--green)}
-.kv b.warn{color:var(--amber)}
-.kv b.bad{color:var(--red)}
-.linkbar{height:6px;border-radius:4px;background:#122032;overflow:hidden;margin-top:8px}
-.linkbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width .3s}
+.kv b{font-family:var(--mono);font-weight:550;color:var(--txt);font-size:12px}
+.kv b.ok{color:var(--success)}
+.kv b.warn{color:var(--warn)}
+.kv b.bad{color:var(--danger)}
+.linkbar{height:6px;border-radius:4px;background:var(--line-soft);overflow:hidden;margin-top:8px}
+.linkbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+
+/* =====================================================================
+   3D VIEW PANEL — base rules (outside the >=1040px dashboard grid).
+   The element carries an inline `display:none`, and only `!important`
+   (inside the grid block below) can beat an inline declaration.
+   ===================================================================== */
+#view3dPanel{
+  box-sizing:border-box;
+  display:block;                /* visibility is driven by the inline style */
+  flex-direction:column;        /* header on top, iframe fills the rest */
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--panel);
+  overflow:hidden;
+}
+#3d-iframe{
+  display:block;
+  width:100%;
+  flex:1 1 0;                   /* fills the flex column in the grid */
+  min-height:0;
+  height:auto;
+  border:none;
+  background:var(--bg);
+}
+
+/* =====================================================================
+   DUAL-VIEW DASHBOARD  (>=1040px)
+   Row 1 : header                            (spans both columns)
+   Row 2 : 2D map  #canvasWrap | 3D #view3dPanel   (equal height, side by side)
+   Row 3 : RESEARCH TELEMETRY  #telemetryPanel     (full width)
+   Row 4 : PID TUNING          #pidPanel           (full width)
+   Row 5 : SENSOR FILTER       #filterPanel        (full width)
+   Every item below is placed EXPLICITLY (grid-row + grid-column), so DOM
+   order can never push the 3D panel underneath the data panels.
+   ===================================================================== */
+@media (min-width:1040px){
+
+  /* ---------- LEFT COLUMN (Teleoperation): fixed 320px ---------- */
+  .col-left{
+    flex:0 0 320px;              /* never grows, never shrinks */
+    width:320px;
+    max-width:320px;
+    min-width:0;
+  }
+  .col-left .col-main{padding:10px 10px 10px 30px;gap:9px}  /* tighter gutters */
+  .col-left .card{padding:11px}
+  .col-left{--joy:124px}         /* joystick + vector stay on one line at 320px */
+
+  /* ---------- RIGHT COLUMN: the dual-view grid ---------- */
+  .col-right .col-main{
+    display:grid;                        /* overrides the base flex column */
+    grid-template-columns:1fr 1fr;       /* two equal windows */
+    grid-auto-rows:auto;
+    grid-auto-flow:row;
+    column-gap:16px;
+    row-gap:16px;
+    align-content:start;
+    align-items:stretch;
+    overflow-y:auto;                     /* stays the scroll container */
+  }
+
+  /* Row 1 : header spans both columns */
+  .col-right .col-main > .col-head{grid-column:1 / -1;grid-row:1}
+
+  /* Row 2 / col 1 : the 2D map, including its overlaid HUD/legend,
+     because those are absolutely positioned children of #canvasWrap. */
+  .col-right .col-main > #canvasWrap{
+    grid-column:1;
+    grid-row:2;
+    height:55vh;
+    min-height:500px;
+    max-height:none;
+  }
+
+  /* Row 2 / col 2 : the 3D view. Explicit row = always beside the map.
+     The inline display:block is beaten only by !important. */
+  #view3dPanel{
+    grid-column:2;
+    grid-row:2;
+    height:55vh;
+    min-height:500px;
+    max-height:none;
+  }
+  #view3dPanel[style*="display:block"]{display:flex !important}
+
+  /* the iframe follows the panel height instead of the fixed 500px inline
+     value, so the two windows stay exactly aligned */
+  #3d-iframe{height:auto !important; min-height:0 !important}
+
+  /* Row 3+ : the data panels, full grid width.
+     display:contents lets #pidPanel / #filterPanel be grid items directly
+     (their inline display:flex would otherwise make one opaque item). */
+  #researchPanels{display:contents !important}
+  .col-right .col-main > #telemetryPanel{grid-column:1 / -1;grid-row:3}
+  .col-right .col-main > #pidPanel{grid-column:1 / -1;grid-row:4}
+  .col-right .col-main > #filterPanel{grid-column:1 / -1;grid-row:5}
+
+  /* While the 3D panel is hidden, the map claims the whole row. */
+  .col-right .col-main:not(:has(#view3dPanel[style*="display:block"])) > #canvasWrap{
+    grid-column:1 / -1;
+  }
+}
 
 /* =====================================================================
    RESPONSIVE : stack under 1040px, hover -> click to expand
@@ -372,10 +489,9 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
   .col-left{border-right:0;border-bottom:1px solid var(--line)}
   .col-main{overflow:visible;padding:12px 12px 12px 34px}
   .col-right .col-main{padding:12px 34px 12px 12px}
-  .canvas-wrap{flex:0 0 auto;height:56vh;min-height:320px}
+  .canvas-wrap{flex:0 0 auto;height:40vh;max-height:40vh;min-height:240px}
   .lang-btn{position:fixed;top:10px;right:36px;z-index:60}
-  .joy-base{width:150px;height:150px}
-  .joy-knob{width:54px;height:54px;margin:-27px 0 0 -27px}
+  :root{--joy:128px}
 }
 @media (max-width:420px){
   .actions{grid-template-columns:1fr}
@@ -383,6 +499,56 @@ input.txt:focus{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+}
+
+/* =====================================================================
+   SYSTEM MANUAL — collapsible disclosure accordion above the console.
+   Native HTML disclosure element: no JavaScript, no event handlers, no state.
+   Collapsed by default (no `open` attribute on the element).
+   ===================================================================== */
+.manual{
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+  background:var(--panel);
+}
+.manual > summary{
+  display:flex;align-items:center;gap:9px;
+  padding:11px clamp(14px,3vw,28px);
+  font-family:var(--mono);font-size:11.5px;font-weight:650;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--txt);
+  cursor:pointer;list-style:none;user-select:none;
+  transition:color .18s,background .18s;
+}
+.manual > summary::-webkit-details-marker{display:none}
+.manual > summary::after{
+  content:"▾";margin-left:auto;color:var(--accent);font-size:11px;
+  transition:transform .2s var(--ease);
+}
+.manual[open] > summary::after{transform:rotate(180deg)}
+.manual > summary:hover{color:var(--accent);background:var(--panel-2)}
+.manual > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+.manual-body{padding:6px clamp(14px,3vw,28px) 20px;background:var(--bg)}
+.manual-grid{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:14px 22px;
+  max-width:1180px;margin:0 auto;
+}
+.mn-sec{border-left:2px solid var(--line);padding:10px 0 10px 14px}
+.mn-h{
+  font-family:var(--mono);font-size:11px;font-weight:650;letter-spacing:.1em;
+  color:var(--accent);margin-bottom:7px;
+}
+.mn-h .mn-en{color:var(--dim-2);font-weight:400}
+.mn-list{display:flex;flex-direction:column;gap:5px}
+.mn-list li{position:relative;padding-left:13px;font-size:12.5px;line-height:1.8;color:var(--txt)}
+.mn-list li::before{
+  content:"▸";position:absolute;left:0;font-size:10px;line-height:1.9;color:var(--accent-2);
+}
+.mn-list b,.mn-p b{font-weight:650;color:var(--accent-2)}
+.mn-p{font-size:12.5px;line-height:1.8;color:var(--txt);margin:0}
+
+@media (max-width:760px){
+  .manual-grid{grid-template-columns:1fr;gap:12px}
 }
 
 /* =====================================================================
@@ -400,17 +566,14 @@ html{scroll-behavior:smooth}
   position:relative;
   padding:56px 28px 46px;
   border-bottom:1px solid var(--line);
-  background:
-    radial-gradient(900px 420px at 15% 0%, rgba(34,211,238,.09) 0%, transparent 62%),
-    radial-gradient(700px 380px at 100% 100%, rgba(167,139,250,.08) 0%, transparent 60%),
-    linear-gradient(180deg,#070c14,#05080e);
+  background:var(--bg);
 }
 #about .about-wrap{max-width:1180px;margin:0 auto}
-#about .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+#about .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
 
 #about .sec-label{
   font-family:var(--mono);font-size:11px;letter-spacing:.24em;
-  text-transform:uppercase;color:var(--cyan);margin-bottom:10px;
+  text-transform:uppercase;color:var(--accent);margin-bottom:10px;
 }
 #about .sec-title{
   font-size:clamp(22px,3.2vw,34px);font-weight:750;letter-spacing:.02em;
@@ -418,7 +581,7 @@ html{scroll-behavior:smooth}
 }
 #about .about-title .en{
   font-family:var(--mono);font-size:.6em;font-weight:650;
-  letter-spacing:.14em;color:var(--cyan);white-space:nowrap;
+  letter-spacing:.14em;color:var(--accent);white-space:nowrap;
 }
 #about .about-title .bar{color:var(--dim-2);font-weight:400;margin:0 10px}
 #about .about-sub{
@@ -428,36 +591,82 @@ html{scroll-behavior:smooth}
 
 #about .panel{
   position:relative;
-  background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));
-  border:1px solid var(--line);border-radius:14px;padding:16px;
+  background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:16px;
   transition:border-color .2s,transform .2s,box-shadow .2s;
 }
 #about .panel.sec::before{
   content:"";position:absolute;left:0;right:0;top:0;height:2px;
-  border-radius:14px 14px 0 0;
-  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  border-radius:var(--radius) var(--radius) 0 0;
+  background:var(--accent);
   opacity:.55;
 }
 #about .panel:hover{
-  border-color:#2d4a6d;transform:translateY(-2px);
-  box-shadow:0 14px 30px rgba(0,0,0,.45);
+  border-color:var(--line);transform:translateY(-2px);
+  box-shadow:0 14px 30px rgba(var(--bg-rgb),.45);
 }
 #about .panel .sec-label{letter-spacing:.2em;margin-bottom:8px}
 #about .panel .sec-title{font-size:14px;font-weight:700;margin:0 0 9px;line-height:1.45}
-#about .sec-body{font-size:12.5px;line-height:1.9;color:#b9cfe8;margin:0}
+#about .sec-body{font-size:12.5px;line-height:1.9;color:var(--txt);margin:0}
+
+/* Foreword / abstract note directly under the section title.
+   Sits above the .grid3 card grid; overrides only the left edge of .panel. */
+#about .about-intro{
+  margin:0 0 24px;
+  max-width:860px;                 /* same measure as .about-sub */
+  background:var(--panel-2);
+  border-left:2px solid var(--accent);
+  padding:14px 18px;
+}
 
 #about .about-cta{
   display:inline-flex;align-items:center;gap:7px;margin-top:26px;
-  padding:9px 16px;border-radius:10px;text-decoration:none;
-  border:1px solid #24405f;color:var(--cyan);font-size:12.5px;font-weight:650;
-  background:linear-gradient(180deg,#12253c,#0c1728);
+  padding:9px 16px;border-radius:var(--radius);text-decoration:none;
+  border:1px solid var(--line);color:var(--accent);font-size:12.5px;font-weight:650;
+  background:var(--panel-2);
   transition:border-color .18s,box-shadow .18s;
 }
-#about .about-cta:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+#about .about-cta:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 
 /* Nested sub-block inside a panel (plugin exploration) */
 #about .sub-block{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line-soft)}
 #about .sub-block .sec-label{margin-bottom:7px}
+
+/* =====================================================================
+   POST-MORTEM LOG CARDS  (scoped to #about .pm*)
+   Industrial log entry: mono header, severity chip, 3 labelled fields.
+   ===================================================================== */
+#about .pm-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+#about .pm-head .sec-label{margin:0}
+#about .pm-sev{
+  margin-left:auto;font-family:var(--mono);font-size:9.5px;font-weight:650;
+  letter-spacing:.14em;padding:2px 7px;border-radius:var(--radius);
+  border:1px solid currentColor;background:rgba(var(--bg-rgb),.5);white-space:nowrap;
+}
+#about .pm-sev.s0{color:var(--danger)}
+#about .pm-sev.s1{color:var(--warn)}
+#about .pm-sev.s2{color:var(--accent-2)}
+#about .panel.pm.p0::before{background:var(--danger)}
+#about .panel.pm.p1::before{background:var(--warn)}
+#about .panel.pm.p2::before{background:var(--accent)}
+
+#about .pm-en{
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--dim-2);line-height:1.5;margin:0 0 4px;
+}
+#about .pm-field{padding-top:9px;margin-top:9px;border-top:1px dashed var(--line-soft)}
+#about .pm-k{
+  display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;margin-bottom:5px;
+}
+#about .pm-k.k-sym{color:var(--warn)}
+#about .pm-k.k-rc{color:var(--danger)}
+#about .pm-k.k-fix{color:var(--success)}
+#about .pm-v{font-size:12.5px;line-height:1.85;color:var(--txt);margin:0}
+#about .pm-v code{
+  font-family:var(--mono);font-size:11.5px;color:var(--accent-2);
+  background:rgba(var(--accent-rgb),.1);border-radius:3px;padding:1px 4px;
+}
 
 @media (max-width:1040px){
   #about{padding:40px 18px 34px}
@@ -469,17 +678,15 @@ html{scroll-behavior:smooth}
    ALGO DEMO MODAL  (visual upgrade — .algo-* / #algoCanvas only)
    ===================================================================== */
 .algo-open{
-  width:100%;color:#d7f7ff;border-color:rgba(34,211,238,.4);
-  background:linear-gradient(180deg,#12233a,#0b1524);
+  width:100%;color:var(--txt);border-color:rgba(var(--accent-rgb),.4);
+  background:var(--panel-2);
 }
-.algo-open:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+.algo-open:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 
 .algo-modal{
   position:fixed;inset:0;z-index:200;display:none;
   align-items:center;justify-content:center;padding:16px;
-  background:
-    radial-gradient(900px 520px at 50% 0%, rgba(34,211,238,.07), transparent 65%),
-    rgba(2,5,10,.88);
+  background:rgba(var(--bg-rgb),.88);
   backdrop-filter:blur(4px);
   /* the dimmed backdrop lets clicks through to #map, so the map stays live
      while the modal is open (that is what feeds the interrupt listener) */
@@ -488,9 +695,9 @@ html{scroll-behavior:smooth}
 .algo-modal.open{display:flex}
 .algo-box{
   width:min(1020px,100%);max-height:94vh;overflow:auto;
-  background:linear-gradient(180deg,#0b1524,#070d16);
-  border:1px solid #1d3350;border-radius:16px;padding:16px;
-  box-shadow:0 30px 90px rgba(0,0,0,.75),0 0 0 1px rgba(34,211,238,.06) inset;
+  background:var(--panel-2);
+  border:1px solid var(--line);border-radius:var(--radius);padding:16px;
+  box-shadow:0 30px 90px rgba(var(--bg-rgb),.75);
   pointer-events:auto;
 }
 .algo-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
@@ -499,55 +706,55 @@ html{scroll-behavior:smooth}
   color:var(--txt);line-height:1.4;
 }
 .algo-close{
-  flex:0 0 auto;padding:7px 12px;border-radius:9px;cursor:pointer;
-  border:1px solid #24405f;background:#0a1320;color:var(--cyan);
+  flex:0 0 auto;padding:7px 12px;border-radius:var(--radius);cursor:pointer;
+  border:1px solid var(--line);background:var(--panel);color:var(--accent);
   font-size:12px;font-weight:650;
   transition:border-color .18s,box-shadow .18s;
 }
-.algo-close:hover{border-color:var(--cyan);box-shadow:0 0 0 3px var(--cyan-soft)}
+.algo-close:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 
 .algo-body{display:grid;grid-template-columns:1.05fr 1fr;gap:12px;align-items:start}
 .algo-stage{position:relative}
 #algoCanvas{
   display:block;width:100%;aspect-ratio:1/1;max-height:58vh;
-  border:1px solid #16283f;border-radius:12px;background:#04060b;
-  box-shadow:inset 0 0 60px rgba(0,0,0,.9),0 0 0 1px rgba(34,211,238,.05);
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);
+  box-shadow:inset 0 0 60px rgba(var(--bg-rgb),.9);
 }
 
 .algo-term{
   display:flex;flex-direction:column;
   height:100%;min-height:220px;max-height:58vh;
-  background:#04070c;border:1px solid #16283f;border-radius:12px;overflow:hidden;
-  box-shadow:inset 0 0 40px rgba(0,0,0,.85);
+  background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  box-shadow:inset 0 0 40px rgba(var(--bg-rgb),.85);
 }
 .algo-term-bar{
   display:flex;align-items:center;gap:6px;
-  padding:7px 10px;background:#081019;border-bottom:1px solid #142438;
-  font-family:var(--mono);font-size:10.5px;color:#5b7093;letter-spacing:.08em;
+  padding:7px 10px;background:var(--bg);border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.08em;
 }
-.algo-term-bar i{width:8px;height:8px;border-radius:50%;background:#1e3050}
-.algo-term-bar i:nth-child(1){background:#f87171}
-.algo-term-bar i:nth-child(2){background:#fbbf24}
-.algo-term-bar i:nth-child(3){background:#34d399}
+.algo-term-bar i{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.algo-term-bar i:nth-child(1){background:var(--danger)}
+.algo-term-bar i:nth-child(2){background:var(--warn)}
+.algo-term-bar i:nth-child(3){background:var(--success)}
 .algo-term-bar span{margin-left:6px}
 .algo-term-body{
   flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:9px 10px;
-  font-family:var(--mono);font-size:10.5px;line-height:1.65;color:#67e8f9;
+  font-family:var(--mono);font-size:10.5px;line-height:1.65;color:var(--accent);
 }
 .algo-line{white-space:pre;animation:algoLineIn .18s ease-out both}
-.algo-line.dim{color:#3f6b7a}
-.algo-line.info{color:#67e8f9}
-.algo-line.ok{color:#34d399}
-.algo-line.warn{color:#fbbf24}
-.algo-line.hit{color:#e879f9}
+.algo-line.dim{color:var(--dim)}
+.algo-line.info{color:var(--accent)}
+.algo-line.ok{color:var(--success)}
+.algo-line.warn{color:var(--warn)}
+.algo-line.hit{color:var(--warn)}
 @keyframes algoLineIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
 .algo-term-prompt{
   display:flex;align-items:center;gap:6px;padding:6px 10px 8px;
-  font-family:var(--mono);font-size:11px;color:#34d399;
-  border-top:1px solid #0f1c2c;
+  font-family:var(--mono);font-size:11px;color:var(--success);
+  border-top:1px solid var(--line);
 }
 .algo-cursor{
-  display:inline-block;width:8px;height:13px;background:#22d3ee;
+  display:inline-block;width:8px;height:13px;background:var(--accent);
   animation:algoBlink 1s steps(2,end) infinite;
 }
 @keyframes algoBlink{50%{opacity:0}}
@@ -560,8 +767,8 @@ html{scroll-behavior:smooth}
   display:inline-block;width:8px;height:8px;border-radius:2px;
   margin-right:5px;vertical-align:middle;
 }
-.algo-status{margin-top:8px;font-family:var(--mono);font-size:11.5px;color:var(--cyan)}
-.algo-note{margin-top:6px;font-family:var(--mono);font-size:10px;color:#3f6b7a;letter-spacing:.04em}
+.algo-status{margin-top:8px;font-family:var(--mono);font-size:11.5px;color:var(--accent)}
+.algo-note{margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.04em}
 
 @media (max-width:720px){
   .algo-body{grid-template-columns:1fr}
@@ -569,45 +776,164 @@ html{scroll-behavior:smooth}
   #algoCanvas{max-height:46vh}
   .algo-term{max-height:34vh;min-height:150px}
 }
+
+/* =====================================================================
+   3D VIEW PANEL — scoped to #view3dPanel / #3d-iframe only.
+   display:none lives on the element itself as an inline style; these rules
+   are layout support so the box never collapses and the frame fills it.
+   ===================================================================== */
+#view3dPanel{
+  flex:0 0 auto;                 /* spacing comes from .col-main gap / grid row-gap */
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--panel);
+  padding:10px 12px;
+}
+#3d-iframe{
+  display:block;
+  width:100%;
+  height:500px;
+  border:none;
+  background:var(--bg);
+}
 </style>
 </head>
 <body>
 
-  <!-- ================= INTRO : MEET THE REAL ME ================= -->
+  <!-- ============ INTRO : ENGINEERING POST-MORTEM LOG ============ -->
   <section id="about">
     <div class="about-wrap">
 
-      <div class="sec-label" data-i18n="about_tag">ABOUT</div>
+      <div class="sec-label">POST-MORTEM</div>
 
       <h2 class="sec-title about-title">
-        <span data-i18n="about_title">展示真实的你</span>
+        <span>系统失效与恢复日志</span>
         <span class="bar">|</span>
-        <span class="en" data-i18n="about_title_en">MEET THE REAL ME</span>
+        <span class="en">ENGINEERING POST-MORTEM LOG</span>
       </h2>
 
-      <p class="about-sub" data-i18n="about_sub">自动化 x AI 全栈 | 驾驭 AI 的架构师。坦诚记录我的极限开发之路。</p>
+      <p class="about-sub">五次真实故障的现象、根因与手术式修复。每一条都来自本控制台的实际开发链路，记录系统边界被击穿的位置，以及为守住它而引入的约束。</p>
+
+      <!-- ============ FOREWORD / ABSTRACT (above the card grid) ============ -->
+      <div class="panel about-intro">
+        <div class="sec-label">前言 · FOREWORD</div>
+        <p class="sec-body">我是 闫寒之，自动化专业。偏好底层操控与全局逻辑分析，正在朝 AI 全栈工程师的方向探索。这个页面是我借助 AI 工作台（DSH），从零构建的机器人遥操作与算法仿真控制台。我把与AI通过交流所学的控制与感知理论，在这里做了一次完整的工程落地。</p>
+      </div>
 
       <div class="grid3">
 
-        <article class="panel sec">
-          <div class="sec-label" data-i18n="about_c1_kicker">01</div>
-          <h3 class="sec-title" data-i18n="about_c1_title">AI 驾驭与全栈实践</h3>
-          <p class="sec-body" data-i18n="about_c1_body">说实话，这个网页的90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。</p>
+        <!-- ============ FAULT-001 : chassis authority contention ============ -->
+        <article class="panel sec pm p0">
+          <div class="pm-head">
+            <span class="sec-label">FAULT-001</span>
+            <span class="pm-sev s0">SEV-1 · P0</span>
+          </div>
+          <h3 class="sec-title">状态机死锁与底盘控制权抢占</h3>
+          <p class="pm-en">State-machine deadlock &amp; chassis authority contention</p>
+
+          <div class="pm-field">
+            <span class="pm-k k-sym">现象 · Symptom</span>
+            <p class="pm-v">手动摇杆与自主导航在并发工况下同时写入底盘指令通道，两路控制源争夺执行权；机器人于原地高频震荡，位姿收敛失败，遥测曲线呈现持续自激。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-rc">根因 · Root Cause</span>
+            <p class="pm-v">控制层缺少指令仲裁与互斥语义：手动接管未被定义为硬中断，运动状态机在阻塞工况下自锁；死区阈值缺失，零速附近的抖动被闭环持续放大。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-fix">手术 · Surgical Fix</span>
+            <p class="pm-v">引入基于优先级的指令仲裁器（<code>Priority-based Arbitrator</code>），确立「手动接管 &gt; 自动导航」的硬中断机制并设定死区阈值；控制权切换原子化，任一时刻仅允许一个控制源持有底盘写权限。</p>
+          </div>
         </article>
 
-        <article class="panel sec">
-          <div class="sec-label" data-i18n="about_c2_kicker">02</div>
-          <h3 class="sec-title" data-i18n="about_c2_title">巡航算法认知</h3>
-          <p class="sec-body" data-i18n="about_c2_body">作为一个自动化学生，我虽不能闭卷手写A*，但我通过AI辅助，深刻理解了‘全局与局部解耦’的巡航逻辑：全局层面，A*负责在静态地图寻找最优路径；局部层面，DWA负责处理动态障碍物微调。我在Canvas操控中，将差速运动学（x += cos(yaw)*v*dt）在浏览器里进行了降维映射，打通了从上位机指令到底盘控制的全局认知。</p>
+        <!-- ============ FAULT-002 : background rAF throttling ============ -->
+        <article class="panel sec pm p0">
+          <div class="pm-head">
+            <span class="sec-label">FAULT-002</span>
+            <span class="pm-sev s0">SEV-1 · P0</span>
+          </div>
+          <h3 class="sec-title">同源策略与后台帧率节流</h3>
+          <p class="pm-en">Same-origin policy &amp; background rAF throttling</p>
+
+          <div class="pm-field">
+            <span class="pm-k k-sym">现象 · Symptom</span>
+            <p class="pm-v">多页面架构下，切换至 3D 页签后浏览器将该文档判定为不可见，主物理引擎的 <code>requestAnimationFrame</code> 被挂起，帧率归零；遥测数据冻结，状态机与视图失去同步。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-rc">根因 · Root Cause</span>
+            <p class="pm-v">浏览器对不可见文档实施后台帧率节流（Background Throttling）；3D 视图与物理引擎分属不同文档上下文，无法共享同一渲染时钟，主循环被降级为 0 Hz。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-fix">手术 · Surgical Fix</span>
+            <p class="pm-v">果断放弃多页交互，实施 iframe 沙盒隔离重构：3D 客户端运行于独立文档，DOM / CSS / JS 作用域完全隔离；通过 <code>window.parent.state</code> 同源直连绕过跨域限制，省去 BroadcastChannel 与状态拷贝，实现零延迟状态同步，且 iframe 始终处于同一可见视口，主循环不再被节流。</p>
+          </div>
         </article>
 
-        <article class="panel sec">
-          <div class="sec-label" data-i18n="about_c3_kicker">03</div>
-          <h3 class="sec-title" data-i18n="about_c3_title">工程实践与降维打击</h3>
-          <p class="sec-body" data-i18n="about_c3_body">真正的工程是一场与现实的搏斗。我遭遇了DSH沙箱写文件报错、平板浏览器内存溢出导致GitHub无法Commit、甚至GitHub被墙。我最终通过“上传文件覆盖”绕过限制，并用无痕模式击穿了缓存。我深刻明白：在极限交付中，稳定的MVP（最小可行性产品）永远优于跑不起来的完美方案。</p>
-          <div class="sub-block">
-            <div class="sec-label" data-i18n="about_c3_sub_label">插件探索</div>
-            <p class="sec-body" data-i18n="about_c3_sub_body">我尝试在安卓 Termux 环境下部署 dsh-synapse（会话地图插件），遭遇了 ARM64 架构下原生模块 require-builtin.node 的编译缺失。这让我意识到移动端部署 AI 环境存在巨大的兼容性壁垒。随后我果断止损，转向标准桌面环境（笔记本）重新梳理 Node.js、pnpm 与 DSH 插件的依赖链路。虽未能完美跑通，但这次失败让我深刻理解了 DSH 的微内核插件机制。从‘使用者’向‘创造者’迈进，我选择从失败中复盘，而非止步于表面。</p>
+        <!-- ============ FAULT-003 : monolith merge / DOM collapse ============ -->
+        <article class="panel sec pm p0">
+          <div class="pm-head">
+            <span class="sec-label">FAULT-003</span>
+            <span class="pm-sev s0">SEV-0 · BLOCKER</span>
+          </div>
+          <h3 class="sec-title">单体合并灾难与 DOM 树坍塌</h3>
+          <p class="pm-en">Monolith merge failure &amp; DOM tree collapse</p>
+
+          <div class="pm-field">
+            <span class="pm-k k-sym">现象 · Symptom</span>
+            <p class="pm-v">试图以正则表达式将 3D 渲染逻辑强行并入主文件（约 5000 行），导致 DOM 结构错位、标签闭合失配；2D 地图与物理循环全线瘫痪，页面白屏。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-rc">根因 · Root Cause</span>
+            <p class="pm-v">全量重写使修改边界失控：以文本替换处理结构化代码，缺少语法级校验与回归基线；单文件高耦合令故障半径覆盖整个运行时。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-fix">手术 · Surgical Fix</span>
+            <p class="pm-v">调用本地完整备份执行时空回溯（Rollback）；确立「微创手术（<code>Surgical Edit</code>）」原则——禁止 AI 全量重写，每次变更限定最小可验证边界，改动前必须保留可回滚基线。</p>
+          </div>
+        </article>
+
+        <!-- ============ FAULT-004 : discrete planner vs continuous physics ============ -->
+        <article class="panel sec pm p1">
+          <div class="pm-head">
+            <span class="sec-label">FAULT-004</span>
+            <span class="pm-sev s1">SEV-2 · P1</span>
+          </div>
+          <h3 class="sec-title">离散算法与连续物理的坐标系错位</h3>
+          <p class="pm-en">Discrete planner vs. continuous kinematics misalignment</p>
+
+          <div class="pm-field">
+            <span class="pm-k k-sym">现象 · Symptom</span>
+            <p class="pm-v">A* 在栅格上的离散路径与差速运动学的连续轨迹发生冲突，路径拐点无法被底盘精确复现；小车沿障碍边缘切入障碍内部，出现「穿墙」。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-rc">根因 · Root Cause</span>
+            <p class="pm-v">规划层与执行层的自由度假设不一致：栅格路径隐含零半径转向能力，而差速底盘受非完整约束与最小转弯半径限制；执行层缺少路径与碰撞体的一致性校验。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-fix">手术 · Surgical Fix</span>
+            <p class="pm-v">建立「执行层物理优先，演示层算法映射」的妥协原则：重写兜底逻辑，以「L 型狗腿绕行」替代直线冲锋；在拐点插入可执行段并做碰撞体一致性校验，确保规划输出始终落在运动学可行域内。</p>
+          </div>
+        </article>
+
+        <!-- ============ FAULT-005 : missing native artifact (ARM64) ============ -->
+        <article class="panel sec pm p2">
+          <div class="pm-head">
+            <span class="sec-label">FAULT-005</span>
+            <span class="pm-sev s2">SEV-3 · P2</span>
+          </div>
+          <h3 class="sec-title">原生依赖缺失与平台兼容性坍塌</h3>
+          <p class="pm-en">Missing native artifact &amp; platform compatibility collapse</p>
+
+          <div class="pm-field">
+            <span class="pm-k k-sym">现象 · Symptom</span>
+            <p class="pm-v">在 Android / Termux（ARM64）环境部署 dsh-synapse 会话地图插件时，<code>require-builtin.node</code> 缺少对应架构的原生编译产物，插件加载失败；移动端内存溢出进一步导致进程中断。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-rc">根因 · Root Cause</span>
+            <p class="pm-v">预编译原生模块的架构覆盖不足，ARM64 无可用二进制；移动端运行时对 Node.js / pnpm 依赖链的支持边界，未被纳入最初的设计假设。</p>
+          </div>
+          <div class="pm-field">
+            <span class="pm-k k-fix">手术 · Surgical Fix</span>
+            <p class="pm-v">执行止损决策（Stop-loss）：冻结移动端路径，转向标准桌面环境重建 Node.js、pnpm 与 DSH 插件的依赖链；并将该失败链路完整复盘，转化为对微内核插件机制的系统性验证结论。</p>
           </div>
         </article>
 
@@ -616,6 +942,48 @@ html{scroll-behavior:smooth}
       <a class="about-cta" href="#app" data-i18n="about_cta">进入控制台 ↓</a>
     </div>
   </section>
+
+  <!-- ============ SYSTEM MANUAL (pure CSS disclosure accordion) ============
+       Sits between the intro section and the console shell. No `open`
+       attribute => collapsed on load; the summary element is the toggle. -->
+  <details class="manual" id="manual">
+    <summary>📖 系统操作手册 | SYSTEM MANUAL</summary>
+
+    <div class="manual-body">
+      <div class="manual-grid">
+
+        <section class="mn-sec">
+          <h3 class="mn-h">1. 遥操作控制台 <span class="mn-en">(Teleoperation)</span></h3>
+          <ul class="mn-list">
+            <li><b>虚拟摇杆</b>：Y轴控制前进/后退，X轴控制转向（非完整约束差速模型）。</li>
+            <li><b>快捷动作</b>：急停（最高优先级锁死）、保持（原地清零）、返航（规划返航至原点）、低速（限制最高速度0.2m/s）。</li>
+          </ul>
+        </section>
+
+        <section class="mn-sec">
+          <h3 class="mn-h">2. 全局与三维视图 <span class="mn-en">(Global View &amp; 3D)</span></h3>
+          <ul class="mn-list">
+            <li><b>2D全局视图</b>：点击地图下发目标点，自动触发 A* 全局规划。蓝色扇形为激光雷达，紫色梯形为相机视野，动态橙色方块用于测试局部避障。</li>
+            <li><b>3D视图</b>：点击3D按钮滑出，利用iframe沙盒隔离。2D物理坐标(x, y, yaw)实时映射至3D世界的(x, z, -yaw)，实现零延迟同步。</li>
+          </ul>
+        </section>
+
+        <section class="mn-sec">
+          <h3 class="mn-h">3. 算法演示对比 <span class="mn-en">(ALGO DEMO)</span></h3>
+          <p class="mn-p">不仅可视化 A* 的寻路过程（Open List波光扩散与Closed List锁定），还支持 A* 与 Dijkstra 的双算法效率对比。通过对比节点的扩展数量、路径长度和毫秒级求解耗时，量化展示启发式函数带来的搜索剪枝收益。</p>
+        </section>
+
+        <section class="mn-sec">
+          <h3 class="mn-h">4. 科研遥测面板 <span class="mn-en">(Research Telemetry)</span></h3>
+          <ul class="mn-list">
+            <li><b>PID TUNING</b>：在线调整 Kp/Ki/Kd，观察速度响应的超调与阻尼。</li>
+            <li><b>SENSOR FILTER</b>：调整 noiseLevel σ 与 alpha α，对比带噪测量值（黄线）与互补滤波估计值（绿线）的误差收敛。</li>
+          </ul>
+        </section>
+
+      </div>
+    </div>
+  </details>
 
 <div class="app" id="app">
 
@@ -758,6 +1126,13 @@ html{scroll-behavior:smooth}
       <!-- ALGO DEMO trigger -->
       <button class="btn algo-open" id="algoOpen" type="button" data-i18n="algo_btn">▶ 算法演示 | ALGO DEMO</button>
 
+      <!-- 3D VIEW trigger — toggles the embedded <iframe> (see #view3dPanel
+           in the right column). It no longer opens a separate tab: the 3D
+           client now lives inside this document so it stays in the same
+           visual viewport (no background-tab throttling) while its DOM stays
+           fully isolated from the 2D canvas. -->
+      <button class="btn algo-open" id="open3d" type="button" aria-controls="view3dPanel" title="Show / hide the embedded 3D view" onclick="var p = document.getElementById('view3dPanel'); if (p.style.display === 'block') { p.setAttribute('style', 'display:none'); } else { p.setAttribute('style', 'display:block'); p.scrollIntoView(); } return false;">🛰 3D 视图 | 3D VIEW</button>
+
       <!-- Event log -->
       <div class="card">
         <div class="card-title"><span data-i18n="log_title">Event log</span>
@@ -829,35 +1204,35 @@ html{scroll-behavior:smooth}
           <span class="chip" id="hudClear">Clearance 0.00 m</span>
         </div>
         <!-- real-time oscilloscope: velocity & position-error vs time -->
-        <div id="oscWrap" style="position:absolute;right:10px;bottom:44px;width:264px;height:112px;border:1px solid #1b2a41;border-radius:12px;background:rgba(6,12,20,.82);overflow:hidden;pointer-events:none">
+        <div id="oscWrap" style="position:absolute;right:10px;bottom:44px;width:264px;height:112px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(var(--bg-rgb),.82);overflow:hidden;pointer-events:none">
           <canvas id="oscCanvas" style="display:block;width:100%;height:100%"></canvas>
         </div>
         <div class="canvas-hint" id="canvasHint" data-i18n="hint_click">Click the map to navigate</div>
         <div class="legend">
-          <span><i style="background:#34d399"></i><span data-i18n="lg_lidar">LiDAR</span></span>
-          <span><i style="background:#a78bfa"></i><span data-i18n="lg_cam">Camera FOV</span></span>
-          <span><i style="background:#22d3ee"></i><span data-i18n="lg_path">Path</span></span>
-          <span><i style="background:#94a9c4"></i><span data-i18n="lg_obs">Obstacle</span></span>
-          <span><i style="background:#e879f9"></i><span>Dynamic</span></span>
+          <span><i style="background:var(--success)"></i><span data-i18n="lg_lidar">LiDAR</span></span>
+          <span><i style="background:var(--accent)"></i><span data-i18n="lg_cam">Camera FOV</span></span>
+          <span><i style="background:var(--accent)"></i><span data-i18n="lg_path">Path</span></span>
+          <span><i style="background:var(--dim)"></i><span data-i18n="lg_obs">Obstacle</span></span>
+          <span><i style="background:var(--warn)"></i><span>Dynamic</span></span>
         </div>
         <!-- perception overlay: ground-truth / measured / filtered markers -->
         <canvas id="perceptionOverlay" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none"></canvas>
       </div>
 
       <!-- ============ EMBEDDED RESEARCH TELEMETRY (below the map) ============ -->
-      <div id="telemetryPanel" style="flex:0 0 auto;border:1px solid #1b2a41;border-radius:12px;background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));padding:10px 12px">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#5b7093">
-          <span style="color:#22d3ee">Research Telemetry / 研究遥测</span>
-          <span id="researchMetrics" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:#b9cfe8">Dynamic Encounters: 0 · Min Clearance: 0.00 m</span>
+      <div id="telemetryPanel" style="flex:0 0 auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)">
+          <span style="color:var(--accent)">Research Telemetry / 研究遥测</span>
+          <span id="researchMetrics" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:var(--txt)">Dynamic Encounters: 0 · Min Clearance: 0.00 m</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div>
-            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:#67e8f9;margin-bottom:4px">VELOCITY v (m/s)</div>
-            <canvas id="telemetry-speed" style="display:block;width:100%;height:92px;background:#04070b;border:1px solid #16283f;border-radius:8px"></canvas>
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--accent);margin-bottom:4px">VELOCITY v (m/s)</div>
+            <canvas id="telemetry-speed" style="display:block;width:100%;height:92px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius)"></canvas>
           </div>
           <div>
-            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:#fbbf24;margin-bottom:4px">CLEARANCE d_min (m)</div>
-            <canvas id="telemetry-clearance" style="display:block;width:100%;height:92px;background:#04070b;border:1px solid #16283f;border-radius:8px"></canvas>
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--warn);margin-bottom:4px">CLEARANCE d_min (m)</div>
+            <canvas id="telemetry-clearance" style="display:block;width:100%;height:92px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius)"></canvas>
           </div>
         </div>
       </div>
@@ -866,10 +1241,10 @@ html{scroll-behavior:smooth}
       <div id="researchPanels" style="flex:0 0 auto;display:flex;flex-direction:column;gap:12px">
 
         <!-- ---------------- CONTROL LAYER ---------------- -->
-        <section id="pidPanel" style="border:1px solid #1b2a41;border-radius:12px;background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));padding:10px 12px">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#5b7093">
-            <span style="color:#22d3ee">PID Tuning / 控制层</span>
-            <span id="pidPreset" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:#b9cfe8">preset: default</span>
+        <section id="pidPanel" style="border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:10px 12px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)">
+            <span style="color:var(--accent)">PID Tuning / 控制层</span>
+            <span id="pidPreset" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:var(--txt)">preset: default</span>
             <button class="btn ghost" id="pidPresetBtn" type="button" style="width:auto;padding:4px 10px;font-size:11px">Preset</button>
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
@@ -887,16 +1262,16 @@ html{scroll-behavior:smooth}
             </label>
           </div>
           <div style="margin-top:8px">
-            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:#67e8f9;margin-bottom:4px">LINEAR VELOCITY v (m/s) — LAST 100 SAMPLES</div>
-            <canvas id="pidCanvas" style="display:block;width:100%;height:92px;background:#04070b;border:1px solid #16283f;border-radius:8px"></canvas>
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--accent);margin-bottom:4px">LINEAR VELOCITY v (m/s) — LAST 100 SAMPLES</div>
+            <canvas id="pidCanvas" style="display:block;width:100%;height:92px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius)"></canvas>
           </div>
         </section>
 
         <!-- ---------------- PERCEPTION LAYER ---------------- -->
-        <section id="filterPanel" style="border:1px solid #1b2a41;border-radius:12px;background:linear-gradient(180deg,rgba(14,26,43,.92),rgba(9,17,29,.92));padding:10px 12px">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#5b7093">
-            <span style="color:#34d399">Sensor Filter / 感知层</span>
-            <span id="filterReadout" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:#b9cfe8">|err| meas 0.00 m · filt 0.00 m</span>
+        <section id="filterPanel" style="border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:10px 12px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)">
+            <span style="color:var(--success)">Sensor Filter / 感知层</span>
+            <span id="filterReadout" style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:var(--txt)">|err| meas 0.00 m · filt 0.00 m</span>
           </div>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
             <label class="field" style="margin:0">
@@ -909,11 +1284,33 @@ html{scroll-behavior:smooth}
             </label>
           </div>
           <div style="margin-top:8px">
-            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:#fbbf24;margin-bottom:4px">ABS ERROR |meas − truth| vs |filt − truth| (m) — LAST 100 SAMPLES</div>
-            <canvas id="filterCanvas" style="display:block;width:100%;height:92px;background:#04070b;border:1px solid #16283f;border-radius:8px"></canvas>
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--warn);margin-bottom:4px">ABS ERROR |meas − truth| vs |filt − truth| (m) — LAST 100 SAMPLES</div>
+            <canvas id="filterCanvas" style="display:block;width:100%;height:92px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius)"></canvas>
           </div>
         </section>
       </div>
+
+      <!-- ============ 3D VIEW PANEL (iframe, fully isolated) ============
+           SAFE ARCHITECTURE: the 3D client runs in its own document, so it
+           shares no DOM, no CSS and no JS scope with the 2D console. It reads
+           the live physics object directly off this window
+           (window.parent.state.x/.y/.yaw) inside its own render loop — there
+           is no BroadcastChannel, no timer and no copy to keep in sync.
+
+           Because the iframe sits in the same visual viewport as the console,
+           requestAnimationFrame inside it is never background-throttled: the
+           3D model keeps tracking while the 2D canvas keeps its frame budget.
+
+           The container starts display:none; the "3D VIEW" button only
+           toggles this wrapper. The child is never re-created, so the WebGL
+           context, camera and scene survive every toggle. -->
+      <section id="view3dPanel" aria-label="3D view (embedded)" style="display:none;flex:0 0 auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)">
+          <span style="color:var(--accent)">3D View / 三维视图</span>
+          <span style="margin-left:auto;letter-spacing:0;text-transform:none;font-size:11px;color:var(--dim)">iframe · window.parent.state</span>
+        </div>
+        <iframe src="./3d-view.html" id="3d-iframe" style="width:100%; height:500px; border:none;"></iframe>
+      </section>
     </div>
   </section>
 </div>
@@ -942,59 +1339,59 @@ html{scroll-behavior:smooth}
       </div>
 
       <!-- ============ RESEARCH BENCHMARK PANEL (appended) ============ -->
-      <div id="algoBench" style="margin-top:12px;border:1px solid #16283f;border-radius:12px;background:#04070c;padding:10px 12px">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;color:#5b7093;letter-spacing:.08em">
+      <div id="algoBench" style="margin-top:12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.08em">
           <span>BENCHMARK / 基准测试</span>
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:#67e8f9;letter-spacing:0">
-            <input id="algoCompare" type="checkbox" style="accent-color:#22d3ee" />
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--accent);letter-spacing:0">
+            <input id="algoCompare" type="checkbox" style="accent-color:var(--accent)" />
             <span>Compare Dijkstra / 对比 Dijkstra</span>
           </label>
           <button class="algo-close" id="algoStart" type="button" style="margin-left:auto">Start / 开始</button>
           <button class="algo-close" id="algoExport" type="button">Export CSV</button>
         </div>
-        <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;color:#b9cfe8">
+        <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;color:var(--txt)">
           <thead>
-            <tr style="color:#5b7093;text-align:left">
-              <th style="padding:3px 6px;border-bottom:1px solid #142438;font-weight:600">METRIC</th>
-              <th style="padding:3px 6px;border-bottom:1px solid #142438;font-weight:600;color:#67e8f9">A*</th>
-              <th id="algoThDij" style="padding:3px 6px;border-bottom:1px solid #142438;font-weight:600;color:#e879f9">Dijkstra</th>
+            <tr style="color:var(--dim);text-align:left">
+              <th style="padding:3px 6px;border-bottom:1px solid var(--line);font-weight:600">METRIC</th>
+              <th style="padding:3px 6px;border-bottom:1px solid var(--line);font-weight:600;color:var(--accent)">A*</th>
+              <th id="algoThDij" style="padding:3px 6px;border-bottom:1px solid var(--line);font-weight:600;color:var(--warn)">Dijkstra</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#5b7093">Nodes Expanded</td>
-              <td id="algoMAstNodes" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#67e8f9">0</td>
-              <td id="algoMDijNodes" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#e879f9">–</td>
+              <td style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--dim)">Nodes Expanded</td>
+              <td id="algoMAstNodes" style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--accent)">0</td>
+              <td id="algoMDijNodes" style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--warn)">–</td>
             </tr>
             <tr>
-              <td style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#5b7093">Path Length</td>
-              <td id="algoMAstLen" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#67e8f9">–</td>
-              <td id="algoMDijLen" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#e879f9">–</td>
+              <td style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--dim)">Path Length</td>
+              <td id="algoMAstLen" style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--accent)">–</td>
+              <td id="algoMDijLen" style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--warn)">–</td>
             </tr>
             <tr>
-              <td style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#5b7093">Execution Time (ms)</td>
-              <td id="algoMAstMs" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#67e8f9">0.0</td>
-              <td id="algoMDijMs" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#e879f9">–</td>
+              <td style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--dim)">Execution Time (ms)</td>
+              <td id="algoMAstMs" style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--accent)">0.0</td>
+              <td id="algoMDijMs" style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--warn)">–</td>
             </tr>
             <tr>
-              <td style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#5b7093">Revealed (sync)</td>
-              <td id="algoMAstRev" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#67e8f9">–</td>
-              <td id="algoMDijRev" style="padding:3px 6px;border-bottom:1px solid #0f1c2c;color:#e879f9">–</td>
+              <td style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--dim)">Revealed (sync)</td>
+              <td id="algoMAstRev" style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--accent)">–</td>
+              <td id="algoMDijRev" style="padding:3px 6px;border-bottom:1px solid var(--line);color:var(--warn)">–</td>
             </tr>
             <tr>
-              <td style="padding:3px 6px;color:#5b7093">Efficiency</td>
-              <td id="algoMEff" colspan="2" style="padding:3px 6px;color:#b9cfe8">–</td>
+              <td style="padding:3px 6px;color:var(--dim)">Efficiency</td>
+              <td id="algoMEff" colspan="2" style="padding:3px 6px;color:var(--txt)">–</td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div class="algo-legend">
-        <span><i style="background:#22d3ee"></i>Start 起点</span>
-        <span><i style="background:#e879f9"></i>Goal 终点</span>
-        <span><i style="background:#a78bfa"></i>Obstacle 障碍</span>
-        <span><i style="background:#22d3ee"></i>Open 待探索</span>
-        <span><i style="background:#1e3a8a"></i>Closed 已探索</span>
+        <span><i style="background:var(--accent)"></i>Start 起点</span>
+        <span><i style="background:var(--warn)"></i>Goal 终点</span>
+        <span><i style="background:var(--accent)"></i>Obstacle 障碍</span>
+        <span><i style="background:var(--accent)"></i>Open 待探索</span>
+        <span><i style="background:var(--accent)"></i>Closed 已探索</span>
       </div>
       <div class="algo-status" id="algoStatus">…</div>
       <div class="algo-note">* 视觉映射 | Visual mapping of current navigation state</div>
@@ -1002,6 +1399,38 @@ html{scroll-behavior:smooth}
   </div>
 
 <script>
+/* =====================================================================
+   CANVAS COLOUR MAP — "scientific aesthetic"
+   CSS custom properties cannot reach canvas pixels, so the palette is
+   mirrored here and read directly. Never use getComputedStyle() for this:
+   it forces a style recalc inside the animation loop.
+   ===================================================================== */
+const CANVAS_COLORS = {
+  bg:      '#0D1016',
+  grid:    '#242A36',
+  robot:   '#3B82F6',
+  trail:   '#10B981',
+  obs:     '#EF4444',
+  path:    '#3B82F6',
+  text:    '#8A919E',
+  accent:  '#3B82F6',
+  warn:    '#F59E0B',
+  danger:  '#EF4444',
+  success: '#10B981',
+  panel:   '#141821',
+  line:    '#242A36'
+};
+/* memoised hex + alpha -> rgba() string; O(1) after the first call */
+var _canvasAlphaCache = Object.create(null);
+function canvasRGBA(hex, a) {
+  var key = hex + '|' + a;
+  var hit = _canvasAlphaCache[key];
+  if (hit) { return hit; }
+  var n = parseInt(hex.slice(1), 16);
+  hit = 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  _canvasAlphaCache[key] = hit;
+  return hit;
+}
 /* =====================================================================
    ROBOT TELEOP CONSOLE — single file, no dependencies
    Batch 1: perception & environment upgrade.
@@ -1101,6 +1530,78 @@ html{scroll-behavior:smooth}
   };
 
   /* ------------------------------------------------------------------
+     1A-bis. EMBED BRIDGE — read-only handle for ./3d-view.html.
+
+     The 3D view runs in a same-origin <iframe> and renders from the LIVE
+     physics object:
+
+         window.parent.state.x / .y / .yaw     (read every rAF frame)
+
+     The getter returns this very `state` object, never a copy, so the
+     iframe reads each step's pose without any message channel, timer or
+     serialisation. Assignment is deliberately dropped: the embedder may
+     read, never write, so the 2D physics stays the single source of truth.
+     Adding this property touches nothing else in this scope — no existing
+     variable is renamed, moved or wrapped.
+     ------------------------------------------------------------------ */
+  try {
+    Object.defineProperty(window, 'state', {
+      configurable: false,
+      enumerable: false,
+      get: function () { return state; },
+      set: function () { /* read-only: the console owns state */ }
+    });
+  } catch (eState) { /* frozen/exotic window: the iframe falls back to its own channel */ }
+
+  /* ------------------------------------------------------------------
+     1B. TELEMETRY LINK — BroadcastChannel bridge to 3d-view.html
+         OUT : robot-telemetry  (pose + obstacles + path + target)
+         IN  : robot-command    (SET_TARGET from the 3D client)
+
+     The console stays the single source of truth; the 3D page is a pure
+     renderer. Both channels are optional: if BroadcastChannel is missing
+     the console keeps running untethered.
+     ------------------------------------------------------------------ */
+  var telemChannel = null, cmdChannel = null;
+  try { telemChannel = new BroadcastChannel('robot-telemetry'); } catch (e1) { telemChannel = null; }
+  try { cmdChannel   = new BroadcastChannel('robot-command');   } catch (e2) { cmdChannel = null; }
+
+  // Publish exactly one frame of physics truth. Called once per simulation
+  // step so the 3D client and the 2D minimap can never disagree.
+  function publishTelemetry() {
+    if (!telemChannel) { return; }
+    telemChannel.postMessage({
+      robotX: state.x,
+      robotY: state.y,
+      robotYaw: state.yaw,
+      obstacles: state.obstacles,                  // [{x0,y0,x1,y1}] arena AABBs
+      path: state.path.points,                     // [{x,y}] waypoints
+      target: state.nav.active ? { x: state.nav.x, y: state.nav.y } : null
+    });
+  }
+
+  // --- Background keep-alive (2nd channel for the 3D client) ------------
+  // The console's physics/render loop is driven by requestAnimationFrame,
+  // which the browser suspends while this tab is hidden. Without this
+  // fallback the 3D tab froze the instant the operator switched to it.
+  // setInterval keeps publishing even in the background (browsers clamp it
+  // to ~1 Hz, which still advances the 3D view instead of freezing it).
+  window.setInterval(publishTelemetry, 150);
+
+  // Inbound commands. Guarded on dom.canvas so a message that lands before
+  // init() has cached the DOM can never run setTarget against a half-built UI.
+  if (cmdChannel) {
+    cmdChannel.onmessage = function (e) {
+      var d = e && e.data;
+      if (!d || d.command !== 'SET_TARGET') { return; }
+      if (!dom.canvas) { return; }
+      var tx = +d.x, ty = +d.y;
+      if (!isFinite(tx) || !isFinite(ty)) { return; }
+      setTarget(tx, ty);
+    };
+  }
+
+  /* ------------------------------------------------------------------
      2. SMALL HELPERS
      ------------------------------------------------------------------ */
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
@@ -1195,15 +1696,15 @@ html{scroll-behavior:smooth}
       about_sub: 'Automation \u00d7 AI Full-Stack | The architect who drives AI. An honest log of an extreme-development path.',
       about_c1_kicker: '01',
       about_c1_title: 'AI Orchestration',
-      about_c1_body: 'Honestly, 90% of the code on this page was generated by AI. But my role was not typist, it was architect. I worked deeply in AI workbenches such as DSH and Codex, and lived through round after round of prompt debugging, a crashing state machine (the robot spinning in place) and misaligned Canvas coordinates. In the end I learned to strike from a higher dimension: AI is an excellent executor, but the owner of the system boundaries and the architecture has to be me.',
+      about_c1_body: 'This console was delivered under a paradigm of parallel AI implementation with human architectural arbitration: rendering, state machine and algorithm modules were produced in parallel by workbenches such as DSH and Codex against explicit interface contracts, while I owned system boundary definition, data-flow constraints and acceptance criteria. Two classes of failure were isolated and fixed along the way - state-machine self-locking under blocked conditions, and a coordinate-mapping mismatch between Canvas world space and device pixel ratio. The governing rule is architectural isolation: rendering, kinematics and control are decoupled by explicit contracts; AI is the efficient implementer, while authority over system boundaries stays with the architect.',
       about_c2_kicker: '02',
       about_c2_title: 'Algorithm Logic',
-      about_c2_body: 'As an automation student I cannot yet hand-write A* from memory with the book closed, but with AI assistance I have come to genuinely understand the cruising logic of decoupling global from local planning: globally, A* finds the optimal path on a static map; locally, DWA adjusts for dynamic obstacles. In the Canvas controls I mapped differential-drive kinematics (x += cos(yaw) * v * dt) down into the browser, which connected the whole chain from high-level commands to chassis control in my head.',
+      about_c2_body: 'The cruise stack uses a decoupled global-local planning architecture. Globally, A* solves for the optimal path on a static occupancy grid and is benchmarked in real time against Dijkstra, quantifying the pruning gain of the heuristic through nodes expanded, path length and millisecond solve time. Locally, dynamic obstacle encounters trigger speed re-planning while a minimum safety clearance is maintained. The differential-drive kinematic model x += cos(yaw) * v * dt is mapped into the browser, making the whole chain from high-level command to chassis execution observable and reproducible.',
       about_c3_kicker: '03',
       about_c3_title: 'Engineering Resilience',
-      about_c3_body: 'Real engineering is a fight with reality. I ran into DSH sandbox file-write errors, a tablet browser running out of memory so GitHub could not commit, and even GitHub being blocked. I got past it by uploading files to overwrite, and broke through the cache with incognito mode. What I now understand deeply: for extreme delivery, a stable MVP always beats a perfect solution that will not run.',
+      about_c3_body: 'The control and perception layers carry the research weight of the console. The velocity loop runs a discrete PID controller tuned online through Kp / Ki / Kd to suppress overshoot and improve damping, tracking the linear-velocity response over a 100-sample window. The perception layer applies complementary filtering to noisy range measurements, with adjustable noise level sigma and confidence coefficient alpha, and plots ground truth, raw measurement and filtered estimate as three synchronised traces in a shared frame alongside their absolute error. On the engineering side, system resilience carried the delivery through sandboxed write restrictions, mobile-browser memory exhaustion and blocked code-hosting links, via redundant channels. The governing judgement: under extreme constraints, a runnable MVP outranks a perfect solution that cannot ship.',
       about_c3_sub_label: 'PLUGIN EXPLORATION',
-      about_c3_sub_body: 'I attempted to deploy the dsh-synapse plugin in an Android Termux environment but encountered a compilation failure of require-builtin.node under ARM64. I pivoted to a desktop environment to re-trace the dependency chain. Although this attempt was incomplete, it taught me the value of resilience and post-mortem analysis in AI engineering.',
+      about_c3_sub_body: 'Plugin exploration began with deploying dsh-synapse (a session-map plugin) under Android / Termux: the ARM64 architecture lacks a prebuilt native artefact for require-builtin.node, which made the compatibility boundary of mobile AI runtimes explicit. That triggered a stop-loss decision and a pivot to a standard desktop environment, re-tracing the dependency chain across Node.js, pnpm and the DSH plugin system. The path never fully closed, but it produced a systematic verification of the DSH micro-kernel plugin mechanism - the move from user to creator starts with a complete post-mortem of the failure chain.',
       about_cta: 'Enter the console \u2193',
       algo_btn: '\u25b6 \u7b97\u6cd5\u6f14\u793a | ALGO DEMO',
       algo_title: 'A* \u5168\u5c40\u8def\u5f84\u89c4\u5212\u53ef\u89c6\u5316 | A* Global Path Planning',
@@ -1286,15 +1787,15 @@ html{scroll-behavior:smooth}
       about_sub: '自动化 x AI 全栈 | 驾驭 AI 的架构师。坦诚记录我的极限开发之路。',
       about_c1_kicker: '01',
       about_c1_title: 'AI 驾驭与全栈实践',
-      about_c1_body: '说实话，这个网页90%的代码由AI生成。但我扮演的不是打字员，而是架构师。我深度使用了DSH、Codex等AI工作台，经历了多轮Prompt调试、Debug崩溃状态机（原地转圈）、Canvas坐标系错位等绝境。最终我学会降维打击：AI是出色的执行者，但系统的边界与架构掌控者，必须是我。',
+      about_c1_body: '本控制台以「AI 并行实现 × 人工架构裁定」的范式交付：渲染层、状态机与算法模块由 DSH、Codex 等工作台按接口契约并行产出，我负责系统边界划分、数据流约束与验收标准定义。开发中定位并修复了两类典型失效——阻塞工况下运动状态机的自锁，以及 Canvas 世界坐标与设备像素比之间的映射错位。由此确立架构隔离原则：渲染层、运动学层与控制层以显式契约解耦；AI 是高效的实现者，而系统边界的定义权必须由架构师掌握。',
       about_c2_kicker: '02',
       about_c2_title: '巡航算法认知',
-      about_c2_body: '作为一个自动化学生，我虽不能闭卷手写A*，但我通过AI辅助，深刻理解了‘全局与局部解耦’的巡航逻辑：全局层面，A*负责在静态地图寻找最优路径；局部层面，DWA负责处理动态障碍物微调。我在Canvas操控中，将差速运动学（x += cos(yaw)*v*dt）在浏览器里进行了降维映射，打通了从上位机指令到底盘控制的全局认知。',
+      about_c2_body: '巡航系统采用全局—局部解耦的双层规划架构：全局层以 A* 在静态栅格地图上求解最优路径，并以实时基准测试与 Dijkstra 对照，用节点扩展数、路径长度与毫秒级求解耗时量化启发式函数的剪枝收益；局部层面向动态障碍物遭遇，执行速度重规划并维持最小安全间隙。差速运动学模型 x += cos(yaw)·v·dt 在浏览器端完成降维映射，使上位机指令到底盘执行的整条链路可观测、可复现。',
       about_c3_kicker: '03',
       about_c3_title: '工程实践与降维打击',
-      about_c3_body: '真正的工程是一场与现实的搏斗。我遭遇了DSH沙箱写文件报错、平板浏览器内存溢出导致GitHub无法Commit、甚至GitHub被墙。我最终通过“上传文件覆盖”绕过限制，并用无痕模式击穿了缓存。我深刻明白：在极限交付中，稳定的MVP（最小可行性产品）永远优于跑不起来的完美方案。',
+      about_c3_body: '控制与感知层构成站点的研究主体：速度环采用离散 PID 闭环，通过 Kp / Ki / Kd 在线整定抑制超调、改善阻尼，并在 100 采样窗口内追踪线性速度响应；感知层对带噪测距实施互补滤波，噪声水平 σ 与置信系数 α 可调，在统一坐标系下同步绘制真值（Ground Truth）、原始测量（Measurement）与滤波估计（Estimated）三条轨迹及其绝对误差对比。工程侧以系统韧性应对极端环境：在沙箱写入受限、移动端内存溢出、代码托管链路被阻断的条件下，经冗余通道完成交付。核心判断是——在极限约束下，可运行的 MVP 优先于无法落地的完美方案。',
       about_c3_sub_label: '插件探索',
-      about_c3_sub_body: '我尝试在安卓 Termux 环境下部署 dsh-synapse（会话地图插件），遭遇了 ARM64 架构下原生模块 require-builtin.node 的编译缺失。这让我意识到移动端部署 AI 环境存在巨大的兼容性壁垒。随后我果断止损，转向标准桌面环境（笔记本）重新梳理 Node.js、pnpm 与 DSH 插件的依赖链路。虽未能完美跑通，但这次失败让我深刻理解了 DSH 的微内核插件机制。从‘使用者’向‘创造者’迈进，我选择从失败中复盘，而非止步于表面。',
+      about_c3_sub_body: '插件方向的探索始于 Android / Termux 环境下的 dsh-synapse（会话地图插件）部署：ARM64 架构缺少 require-builtin.node 的原生编译产物，移动端 AI 运行时的兼容性边界由此显性化。据此执行止损决策，转向标准桌面环境重构 Node.js、pnpm 与 DSH 插件的依赖链路。该路径虽未完全贯通，但完成了对 DSH 微内核插件机制的系统性验证——从使用者到创造者的迁移，始于对失败链路的完整复盘。',
       about_cta: '进入控制台 ↓',
       algo_btn: '▶ 算法演示 | ALGO DEMO',
       algo_title: 'A* 全局路径规划可视化 | A* Global Path Planning',
@@ -1999,6 +2500,7 @@ html{scroll-behavior:smooth}
           setMission('INSPECTING');
         }
         updateHud(0, true);
+        publishTelemetry();                   // arrival frame still ships a packet
         return finishFrame(dt);
       }
       wantVx = cmd.vx; wantVyaw = cmd.vyaw;
@@ -2060,6 +2562,7 @@ html{scroll-behavior:smooth}
     state.flash = Math.max(0, state.flash - dt * 2.0);
 
     oscSample(dt);                            // log velocity + error for the scope
+    publishTelemetry();                       // end of step -> ship to the 3D client
     return finishFrame(dt);
   }
 
@@ -2109,10 +2612,10 @@ html{scroll-behavior:smooth}
      13. RENDER
      ------------------------------------------------------------------ */
   function modeColor(mode) {
-    if (mode === 'estop') { return '#f87171'; }
-    if (mode === 'auto') { return '#fbbf24'; }
-    if (mode === 'manual') { return '#22d3ee'; }
-    return '#5b7093';
+    if (mode === 'estop') { return CANVAS_COLORS.danger; }
+    if (mode === 'auto') { return CANVAS_COLORS.warn; }
+    if (mode === 'manual') { return CANVAS_COLORS.accent; }
+    return CANVAS_COLORS.text;
   }
 
   function gridStep() {
@@ -2132,10 +2635,10 @@ html{scroll-behavior:smooth}
     for (gx = x0; gx <= x1; gx += step) {
       major = (Math.abs(gx) < 1e-6) || (gx % (step * 5) === 0);
       sx = Math.round(w2sX(gx)) + 0.5;
-      ctx.strokeStyle = major ? 'rgba(34,211,238,.16)' : 'rgba(127,150,184,.07)';
+      ctx.strokeStyle = major ? canvasRGBA(CANVAS_COLORS.accent, .16) : canvasRGBA(CANVAS_COLORS.text, .07);
       ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, ch); ctx.stroke();
       if (major && view.s > 12) {
-        ctx.fillStyle = 'rgba(127,150,184,.5)';
+        ctx.fillStyle = canvasRGBA(CANVAS_COLORS.text, .5);
         ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
         ctx.textAlign = 'left'; ctx.textBaseline = 'top';
         ctx.fillText(gx + 'm', sx + 3, view.cy + 3);
@@ -2144,10 +2647,10 @@ html{scroll-behavior:smooth}
     for (gy = y0; gy <= y1; gy += step) {
       major = (Math.abs(gy) < 1e-6) || (gy % (step * 5) === 0);
       sy = Math.round(w2sY(gy)) + 0.5;
-      ctx.strokeStyle = major ? 'rgba(34,211,238,.16)' : 'rgba(127,150,184,.07)';
+      ctx.strokeStyle = major ? canvasRGBA(CANVAS_COLORS.accent, .16) : canvasRGBA(CANVAS_COLORS.text, .07);
       ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(cw, sy); ctx.stroke();
       if (major && view.s > 12) {
-        ctx.fillStyle = 'rgba(127,150,184,.5)';
+        ctx.fillStyle = canvasRGBA(CANVAS_COLORS.text, .5);
         ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
         ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
         ctx.fillText(gy + 'm', view.cx + 3, sy - 3);
@@ -2159,7 +2662,7 @@ html{scroll-behavior:smooth}
     ctx.save();
     ctx.setLineDash([7, 7]);
     ctx.lineDashOffset = 0;
-    ctx.strokeStyle = 'rgba(127,150,184,.4)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.text, .4);
     ctx.lineWidth = 1.2;
     ctx.strokeRect(w2sX(-ARENA_HX), w2sY(-ARENA_HY), ARENA_HX * 2 * view.s, ARENA_HY * 2 * view.s);
     ctx.restore();
@@ -2179,9 +2682,9 @@ html{scroll-behavior:smooth}
       // Painted largest-first so the obstacle body leaves two visible rings.
       ctx.save();
       var bands = [
-        { m: PATH_CLEAR + 0.35, c: 'rgba(251,191,36,.13)' },   // outer: penalty
-        { m: COLLIDE_R + 0.10,  c: 'rgba(251,146,60,.17)' },   // mid:  high cost
-        { m: COLLIDE_R,         c: 'rgba(248,113,113,.20)' }   // inner: lethal
+        { m: PATH_CLEAR + 0.35, c: canvasRGBA(CANVAS_COLORS.warn, .13) },   // outer: penalty
+        { m: COLLIDE_R + 0.10,  c: canvasRGBA(CANVAS_COLORS.warn, .17) },   // mid:  high cost
+        { m: COLLIDE_R,         c: canvasRGBA(CANVAS_COLORS.danger, .20) }   // inner: lethal
       ];
       for (var bi = 0; bi < bands.length; bi++) {
         var im = bands[bi].m * view.s;
@@ -2191,8 +2694,8 @@ html{scroll-behavior:smooth}
       ctx.restore();
 
       ctx.save();
-      ctx.fillStyle = warn ? 'rgba(248,113,113,.26)' : 'rgba(148,169,196,.15)';
-      ctx.strokeStyle = warn ? 'rgba(248,113,113,.9)' : 'rgba(148,169,196,.6)';
+      ctx.fillStyle = warn ? canvasRGBA(CANVAS_COLORS.danger, .26) : canvasRGBA(CANVAS_COLORS.text, .15);
+      ctx.strokeStyle = warn ? canvasRGBA(CANVAS_COLORS.danger, .9) : canvasRGBA(CANVAS_COLORS.text, .6);
       ctx.lineWidth = warn ? 2 : 1.2;
       ctx.fillRect(x, y, w, h);
       ctx.strokeRect(x, y, w, h);
@@ -2201,7 +2704,7 @@ html{scroll-behavior:smooth}
       ctx.beginPath();
       ctx.rect(x, y, w, h);
       ctx.clip();
-      ctx.strokeStyle = warn ? 'rgba(248,113,113,.35)' : 'rgba(148,169,196,.22)';
+      ctx.strokeStyle = warn ? canvasRGBA(CANVAS_COLORS.danger, .35) : canvasRGBA(CANVAS_COLORS.text, .22);
       ctx.lineWidth = 1;
       for (var hx = -h; hx < w; hx += 9) {
         ctx.beginPath(); ctx.moveTo(x + hx, y + h); ctx.lineTo(x + hx + h, y); ctx.stroke();
@@ -2213,7 +2716,7 @@ html{scroll-behavior:smooth}
   function drawTrail() {
     if (state.trail.length < 2) { return; }
     ctx.save();
-    ctx.strokeStyle = 'rgba(34,211,238,.26)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .26);
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.beginPath();
@@ -2234,7 +2737,7 @@ html{scroll-behavior:smooth}
 
     ctx.save();
     ctx.setLineDash([3, 7]);
-    ctx.strokeStyle = 'rgba(52,211,153,.18)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.success, .18);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(cx, cy, range * view.s, 0, TAU);
@@ -2269,9 +2772,9 @@ html{scroll-behavior:smooth}
       if (i === 0) { ctx.moveTo(px, py); } else { ctx.lineTo(px, py); }
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(52,211,153,.045)';
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.success, .045);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(52,211,153,.22)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.success, .22);
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
@@ -2282,7 +2785,7 @@ html{scroll-behavior:smooth}
       var q = pts[i];
       ctx.beginPath();
       ctx.arc(w2sX(q.x), w2sY(q.y), q.hit ? 1.9 : 1.1, 0, TAU);
-      ctx.fillStyle = q.hit ? 'rgba(134,239,172,.9)' : 'rgba(52,211,153,.2)';
+      ctx.fillStyle = q.hit ? canvasRGBA(CANVAS_COLORS.success, .9) : canvasRGBA(CANVAS_COLORS.success, .2);
       ctx.fill();
     }
     ctx.restore();
@@ -2297,16 +2800,16 @@ html{scroll-behavior:smooth}
     ctx.save();
     ctx.translate(cx, cy);
     var g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-    g.addColorStop(0, 'rgba(167,139,250,.34)');
-    g.addColorStop(0.7, 'rgba(167,139,250,.13)');
-    g.addColorStop(1, 'rgba(167,139,250,0)');
+    g.addColorStop(0, canvasRGBA(CANVAS_COLORS.accent, .34));
+    g.addColorStop(0.7, canvasRGBA(CANVAS_COLORS.accent, .13));
+    g.addColorStop(1, canvasRGBA(CANVAS_COLORS.accent, 0));
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, r, a0, a1);
     ctx.closePath();
     ctx.fillStyle = g;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(167,139,250,.45)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .45);
     ctx.lineWidth = 1.2;
     ctx.stroke();
 
@@ -2315,7 +2818,7 @@ html{scroll-behavior:smooth}
     ctx.setLineDash([5, 6]);
     ctx.moveTo(0, 0);
     ctx.lineTo(Math.cos(state.yaw) * r, Math.sin(state.yaw) * r);
-    ctx.strokeStyle = 'rgba(196,181,253,.55)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .55);
     ctx.lineWidth = 1.2;
     ctx.stroke();
     ctx.restore();
@@ -2331,7 +2834,7 @@ html{scroll-behavior:smooth}
     ctx.save();
     ctx.setLineDash([9, 7]);
     ctx.lineDashOffset = -now / 55;
-    ctx.strokeStyle = 'rgba(34,211,238,.55)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .55);
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
@@ -2347,7 +2850,7 @@ html{scroll-behavior:smooth}
       ctx.save();
       ctx.setLineDash([9, 7]);
       ctx.lineDashOffset = -now / 55;
-      ctx.strokeStyle = 'rgba(103,232,249,.95)';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .95);
       ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
@@ -2364,9 +2867,9 @@ html{scroll-behavior:smooth}
       ctx.moveTo(mx, my - 5.5); ctx.lineTo(mx + 5.5, my);
       ctx.lineTo(mx, my + 5.5); ctx.lineTo(mx - 5.5, my);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(34,211,238,.95)';
+      ctx.fillStyle = canvasRGBA(CANVAS_COLORS.accent, .95);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(6,14,24,.9)';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.bg, .9);
       ctx.lineWidth = 1.4;
       ctx.stroke();
       ctx.restore();
@@ -2384,16 +2887,16 @@ html{scroll-behavior:smooth}
     ctx.save();
     ctx.setLineDash([6, 5]);
     ctx.lineDashOffset = -performance.now() / 40;
-    ctx.strokeStyle = 'rgba(251,191,36,.95)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .95);
     ctx.lineWidth = 2.4;
     ctx.strokeRect(x, y, w, h);
     ctx.restore();
 
     var bw = Math.max(30, w), bx = x + (w - bw) / 2, by = y - 11;
     ctx.save();
-    ctx.fillStyle = 'rgba(6,12,20,.85)';
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.bg, .85);
     ctx.fillRect(bx, by, bw, 5);
-    ctx.fillStyle = '#fbbf24';
+    ctx.fillStyle = CANVAS_COLORS.warn;
     ctx.fillRect(bx, by, bw * prog, 5);
     ctx.restore();
   }
@@ -2407,14 +2910,14 @@ html{scroll-behavior:smooth}
     ctx.translate(tx, ty);
     ctx.rotate(now * 0.9);
     ctx.setLineDash([5, 5]);
-    ctx.strokeStyle = 'rgba(251,191,36,.9)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .9);
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(0, 0, 12, 0, TAU); ctx.stroke();
     ctx.restore();
 
     ctx.save();
     ctx.translate(tx, ty);
-    ctx.strokeStyle = '#fbbf24';
+    ctx.strokeStyle = CANVAS_COLORS.warn;
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(-6, 0); ctx.lineTo(6, 0);
@@ -2440,7 +2943,7 @@ html{scroll-behavior:smooth}
     ctx.beginPath();
     ctx.arc(0, 0, COLLIDE_R * view.s, 0, TAU);
     ctx.setLineDash([4, 5]);
-    ctx.strokeStyle = danger ? 'rgba(248,113,113,.55)' : 'rgba(248,113,113,.18)';
+    ctx.strokeStyle = danger ? canvasRGBA(CANVAS_COLORS.danger, .55) : canvasRGBA(CANVAS_COLORS.danger, .18);
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
@@ -2453,13 +2956,13 @@ html{scroll-behavior:smooth}
       var ex = cx + Math.cos(state.yaw) * len * dir;
       var ey = cy + Math.sin(state.yaw) * len * dir;
       ctx.save();
-      ctx.strokeStyle = dir > 0 ? 'rgba(52,211,153,.8)' : 'rgba(251,191,36,.8)';
+      ctx.strokeStyle = dir > 0 ? canvasRGBA(CANVAS_COLORS.success, .8) : canvasRGBA(CANVAS_COLORS.warn, .8);
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
       ctx.translate(ex, ey); ctx.rotate(state.yaw + (dir < 0 ? Math.PI : 0));
       ctx.beginPath();
       ctx.moveTo(0, 0); ctx.lineTo(-8, -4.5); ctx.lineTo(-8, 4.5); ctx.closePath();
-      ctx.fillStyle = dir > 0 ? 'rgba(52,211,153,.9)' : 'rgba(251,191,36,.9)';
+      ctx.fillStyle = dir > 0 ? canvasRGBA(CANVAS_COLORS.success, .9) : canvasRGBA(CANVAS_COLORS.warn, .9);
       ctx.fill();
       ctx.restore();
     }
@@ -2471,7 +2974,7 @@ html{scroll-behavior:smooth}
       ctx.beginPath();
       ctx.arc(0, 0, R * 1.9, -0.7, 0.7);
       ctx.setLineDash([]);
-      ctx.strokeStyle = 'rgba(34,211,238,.75)';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .75);
       ctx.lineWidth = 2.4;
       ctx.stroke();
       ctx.restore();
@@ -2481,21 +2984,21 @@ html{scroll-behavior:smooth}
     ctx.save();
     ctx.translate(cx, cy);
     if (state.estop) {
-      ctx.strokeStyle = 'rgba(248,113,113,' + (0.5 + 0.35 * Math.sin(now * 7)).toFixed(3) + ')';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.danger, (0.5 + 0.35 * Math.sin(now * 7)).toFixed(3));
       ctx.lineWidth = 2.2;
       ctx.beginPath(); ctx.arc(0, 0, R * 2.05, 0, TAU); ctx.stroke();
     } else if (state.mission.name === 'INSPECTING') {
       ctx.save();
       ctx.rotate(now * 1.7);
       ctx.beginPath(); ctx.arc(0, 0, R * 2.1, -0.6, 0.6);
-      ctx.strokeStyle = 'rgba(167,139,250,.9)';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .9);
       ctx.lineWidth = 2.6;
       ctx.stroke();
       ctx.restore();
     } else if (state.nav.active) {
       ctx.setLineDash([4, 5]);
       ctx.lineDashOffset = -now * 20;
-      ctx.strokeStyle = 'rgba(251,191,36,.75)';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .75);
       ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.arc(0, 0, R * 1.75, 0, TAU); ctx.stroke();
     }
@@ -2506,14 +3009,7 @@ html{scroll-behavior:smooth}
     ctx.translate(cx, cy);
     ctx.rotate(state.yaw);
 
-    var body = ctx.createLinearGradient(-R, -R, R, R);
-    if (danger) {
-      body.addColorStop(0, '#7f1d1d');
-      body.addColorStop(1, '#ef4444');
-    } else {
-      body.addColorStop(0, '#0e5f77');
-      body.addColorStop(1, '#1fb6d4');
-    }
+    var body = danger ? CANVAS_COLORS.danger : CANVAS_COLORS.robot;
 
     ctx.beginPath();
     ctx.moveTo(R * 1.5, 0);
@@ -2524,23 +3020,23 @@ html{scroll-behavior:smooth}
     ctx.fillStyle = body;
     ctx.fill();
     ctx.lineWidth = 1.8;
-    ctx.strokeStyle = danger ? '#fecaca' : (state.estop ? '#f87171' : col);
+    ctx.strokeStyle = danger ? CANVAS_COLORS.warn : (state.estop ? CANVAS_COLORS.danger : col);
     ctx.stroke();
 
     // white front marker
     ctx.beginPath();
     ctx.moveTo(R * 1.5, 0);
     ctx.lineTo(R * 0.55, 0);
-    ctx.strokeStyle = 'rgba(240,253,255,.95)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.text, .95);
     ctx.lineWidth = 2.4;
     ctx.stroke();
 
     // sensor bump
     ctx.beginPath();
     ctx.arc(R * 0.12, 0, R * 0.26, 0, TAU);
-    ctx.fillStyle = 'rgba(4,16,24,.85)';
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.bg, .85);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(190,255,255,.7)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.text, .7);
     ctx.lineWidth = 1.2;
     ctx.stroke();
     ctx.restore();
@@ -2555,13 +3051,13 @@ html{scroll-behavior:smooth}
       ctx.beginPath();
       ctx.moveTo(R * 0.9, 0);
       ctx.lineTo(R * (1.9 + ext * 1.4), 0);
-      ctx.strokeStyle = 'rgba(251,191,36,' + (0.55 + 0.45 * ext).toFixed(3) + ')';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, (0.55 + 0.45 * ext).toFixed(3));
       ctx.lineWidth = 3.6;
       ctx.lineCap = 'round';
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(R * (1.9 + ext * 1.4), 0, 3.4, 0, TAU);
-      ctx.fillStyle = '#fde68a';
+      ctx.fillStyle = CANVAS_COLORS.warn;
       ctx.fill();
       ctx.restore();
 
@@ -2569,7 +3065,7 @@ html{scroll-behavior:smooth}
       ctx.translate(cx, cy);
       ctx.beginPath();
       ctx.arc(0, 0, R * 2.6, -Math.PI / 2, -Math.PI / 2 + prog * TAU);
-      ctx.strokeStyle = '#fbbf24';
+      ctx.strokeStyle = CANVAS_COLORS.warn;
       ctx.lineWidth = 3;
       ctx.lineCap = 'round';
       ctx.stroke();
@@ -2581,7 +3077,7 @@ html{scroll-behavior:smooth}
     ctx.font = '600 11px ui-monospace,Menlo,Consolas,monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = danger ? 'rgba(254,202,202,.95)' : 'rgba(219,234,254,.92)';
+    ctx.fillStyle = danger ? canvasRGBA(CANVAS_COLORS.text, .95) : canvasRGBA(CANVAS_COLORS.text, .92);
     ctx.fillText(state.label, cx, cy - R * 1.95 - 6);
     ctx.restore();
   }
@@ -2674,7 +3170,7 @@ html{scroll-behavior:smooth}
     oscCtx.clearRect(0, 0, oscW, oscH);
 
     // plot box + vertical grid
-    oscCtx.strokeStyle = 'rgba(27,42,65,.9)';
+    oscCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .9);
     oscCtx.lineWidth = 1;
     oscCtx.strokeRect(3.5, 3.5, oscW - 7, oscH - 7);
     oscCtx.beginPath();
@@ -2682,22 +3178,22 @@ html{scroll-behavior:smooth}
       var gxp = 4 + (oscW - 8) * gx / 4;
       oscCtx.moveTo(gxp, 4); oscCtx.lineTo(gxp, oscH - 4);
     }
-    oscCtx.strokeStyle = 'rgba(27,42,65,.55)';
+    oscCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .55);
     oscCtx.stroke();
 
     // velocity (cyan) and position error (amber), each on its own scale
-    drawTrace(o.vel, o.max, Math.max(traceScale(o.vel), 0.2), 'rgba(34,211,238,.95)');
-    drawTrace(o.err, o.max, Math.max(traceScale(o.err), 0.2), 'rgba(251,191,36,.95)');
+    drawTrace(o.vel, o.max, Math.max(traceScale(o.vel), 0.2), canvasRGBA(CANVAS_COLORS.accent, .95));
+    drawTrace(o.err, o.max, Math.max(traceScale(o.err), 0.2), canvasRGBA(CANVAS_COLORS.warn, .95));
 
     var lastV = o.vel.length ? o.vel[o.vel.length - 1] : 0;
     var lastE = o.err.length ? o.err[o.err.length - 1] : 0;
     oscCtx.font = '10px ui-monospace,Menlo,Consolas,monospace';
     oscCtx.textBaseline = 'alphabetic';
-    oscCtx.fillStyle = 'rgba(34,211,238,.95)';
+    oscCtx.fillStyle = canvasRGBA(CANVAS_COLORS.accent, .95);
     oscCtx.fillText('v ' + lastV.toFixed(2) + ' m/s', 8, oscH - 5);
-    oscCtx.fillStyle = 'rgba(251,191,36,.95)';
+    oscCtx.fillStyle = canvasRGBA(CANVAS_COLORS.warn, .95);
     oscCtx.fillText('e ' + lastE.toFixed(2) + ' m', 100, oscH - 5);
-    oscCtx.fillStyle = o.paused ? 'rgba(248,113,113,.9)' : 'rgba(127,150,184,.8)';
+    oscCtx.fillStyle = o.paused ? canvasRGBA(CANVAS_COLORS.danger, .9) : canvasRGBA(CANVAS_COLORS.text, .8);
     oscCtx.fillText(o.paused ? 'HOLD' : 'RUN', oscW - 38, oscH - 5);
   }
 
@@ -2801,7 +3297,7 @@ html{scroll-behavior:smooth}
     ctx.save();
     // patrol guide
     ctx.setLineDash([4, 6]);
-    ctx.strokeStyle = 'rgba(167,139,250,.35)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .35);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(w2sX(d.minX), w2sY(d.y));
@@ -2810,15 +3306,15 @@ html{scroll-behavior:smooth}
     ctx.setLineDash([]);
 
     // purple square body
-    ctx.fillStyle = 'rgba(167,139,250,.42)';
-    ctx.strokeStyle = 'rgba(232,121,249,.95)';
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.accent, .42);
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .95);
     ctx.lineWidth = 1.6;
     ctx.fillRect(x, y, w, h);
     ctx.strokeRect(x, y, w, h);
 
     // heading chevron (shows the constant-speed direction)
     var cx = w2sX(d.x), cy = w2sY(d.y), sgn = d.vx >= 0 ? 1 : -1;
-    ctx.fillStyle = 'rgba(240,171,252,.95)';
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.warn, .95);
     ctx.beginPath();
     ctx.moveTo(cx + sgn * w * 0.22, cy);
     ctx.lineTo(cx - sgn * w * 0.12, cy - h * 0.18);
@@ -2847,7 +3343,7 @@ html{scroll-behavior:smooth}
     c.clearRect(0, 0, w, h);
 
     // frame + horizontal gridlines
-    c.strokeStyle = 'rgba(27,42,65,.9)';
+    c.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .9);
     c.lineWidth = 1;
     c.strokeRect(3.5, 3.5, w - 7, h - 7);
     c.beginPath();
@@ -2855,7 +3351,7 @@ html{scroll-behavior:smooth}
       var gy = Math.round(4 + (h - 8) * i / 4) + 0.5;
       c.moveTo(4, gy); c.lineTo(w - 4, gy);
     }
-    c.strokeStyle = 'rgba(27,42,65,.5)';
+    c.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .5);
     c.stroke();
 
     // auto-scale with a sensible floor so a quiet trace stays readable
@@ -2882,7 +3378,7 @@ html{scroll-behavior:smooth}
     c.textBaseline = 'alphabetic';
     c.fillStyle = color;
     c.fillText(cur.toFixed(2) + ' ' + unit, 7, h - 5);
-    c.fillStyle = 'rgba(127,150,184,.8)';
+    c.fillStyle = canvasRGBA(CANVAS_COLORS.text, .8);
     c.fillText('max ' + maxV.toFixed(2), Math.max(7, w - 66), h - 5);
   }
 
@@ -2894,11 +3390,11 @@ html{scroll-behavior:smooth}
 
     if (telSpeedCtx) {
       telPlot(telSpeedCtx, telPrep(dom.telemetrySpeed, telSpeedCtx), r.speed,
-              'rgba(34,211,238,.95)', 'm/s', 0.5);
+              canvasRGBA(CANVAS_COLORS.accent, .95), 'm/s', 0.5);
     }
     if (telClearCtx) {
       telPlot(telClearCtx, telPrep(dom.telemetryClearance, telClearCtx), r.clear,
-              'rgba(251,191,36,.95)', 'm', 1.0);
+              canvasRGBA(CANVAS_COLORS.warn, .95), 'm', 1.0);
     }
 
     if (dom.researchMetrics) {
@@ -2914,8 +3410,8 @@ html{scroll-behavior:smooth}
     resizeCanvas();
 
     var bg = ctx.createRadialGradient(cw / 2, ch / 2, 0, cw / 2, ch / 2, Math.max(cw, ch) * 0.78);
-    bg.addColorStop(0, '#0a1524');
-    bg.addColorStop(1, '#04070d');
+    bg.addColorStop(0, CANVAS_COLORS.bg);
+    bg.addColorStop(1, CANVAS_COLORS.bg);
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, cw, ch);
 
@@ -3168,10 +3664,7 @@ html{scroll-behavior:smooth}
     }
     if (dom.battBar) {
       dom.battBar.style.width = clamp(s.batt, 0, 100) + '%';
-      dom.battBar.style.background = s.batt > 50
-        ? 'linear-gradient(90deg,#34d399,#22d3ee)'
-        : (s.batt > 20 ? 'linear-gradient(90deg,#fbbf24,#f59e0b)'
-                       : 'linear-gradient(90deg,#f87171,#dc2626)');
+      dom.battBar.style.background = s.batt > 50 ? 'var(--success)' : (s.batt > 20 ? 'var(--warn)' : 'var(--danger)');
     }
     if (dom.sCpu) { dom.sCpu.textContent = Math.round(s.cpu) + '%'; }
     if (dom.cpuBar) { dom.cpuBar.style.width = Math.round(s.cpu) + '%'; }
@@ -4234,11 +4727,11 @@ html{scroll-behavior:smooth}
     var i, x, y, px, py, key, gx, gy, sx, sy;
 
     ctx.clearRect(0, 0, cw, ch);
-    ctx.fillStyle = '#04060b';
+    ctx.fillStyle = CANVAS_COLORS.bg;
     ctx.fillRect(0, 0, cw, ch);
 
     // very faint grid
-    ctx.strokeStyle = 'rgba(127,150,184,.07)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.text, .07);
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (i = 0; i <= N; i++) {
@@ -4257,7 +4750,7 @@ html{scroll-behavior:smooth}
         ctx.rect(ox + x * cell + 1, oy + y * cell + 1, cell - 2, cell - 2);
       }
     }
-    ctx.fillStyle = bench.dijkstra ? 'rgba(34,211,238,.55)' : 'rgba(23,42,92,.85)';
+    ctx.fillStyle = bench.dijkstra ? canvasRGBA(CANVAS_COLORS.accent, .55) : canvasRGBA(CANVAS_COLORS.line, .85);
     ctx.fill();
 
     // ---- Dijkstra expansion overlay (magenta) --------------------------
@@ -4273,7 +4766,7 @@ html{scroll-behavior:smooth}
         ctx.rect(ox + dc.x * cell + cell * 0.30, oy + dc.y * cell + cell * 0.30,
                  cell * 0.40, cell * 0.40);
       }
-      ctx.fillStyle = 'rgba(232,121,249,.85)';
+      ctx.fillStyle = canvasRGBA(CANVAS_COLORS.warn, .85);
       ctx.fill();
     }
 
@@ -4285,9 +4778,9 @@ html{scroll-behavior:smooth}
         ctx.rect(ox + x * cell + 1.5, oy + y * cell + 1.5, cell - 3, cell - 3);
       }
     }
-    ctx.fillStyle = '#5b3fa8';
+    ctx.fillStyle = CANVAS_COLORS.line;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(167,139,250,.75)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .75);
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -4297,8 +4790,6 @@ html{scroll-behavior:smooth}
       openMap[openList[i].x + ',' + openList[i].y] = true;
     }
     ctx.save();
-    ctx.shadowColor = 'rgba(34,211,238,.9)';
-    ctx.shadowBlur = 6 + 12 * pulse;
     ctx.beginPath();
     for (y = 0; y < N; y++) {
       for (x = 0; x < N; x++) {
@@ -4308,7 +4799,7 @@ html{scroll-behavior:smooth}
         ctx.rect(ox + x * cell + 1.5, oy + y * cell + 1.5, cell - 3, cell - 3);
       }
     }
-    ctx.fillStyle = 'rgba(34,211,238,' + (0.30 + 0.45 * pulse).toFixed(3) + ')';
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.accent, (0.30 + 0.45 * pulse).toFixed(3));
     ctx.fill();
     ctx.restore();
 
@@ -4317,9 +4808,7 @@ html{scroll-behavior:smooth}
       ctx.save();
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.shadowColor = '#22d3ee';
-      ctx.shadowBlur = 18;
-      ctx.strokeStyle = 'rgba(103,232,249,.95)';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .95);
       ctx.lineWidth = Math.max(3, cell * 0.26);
       smoothTrace(smoothed);
       ctx.stroke();
@@ -4328,7 +4817,7 @@ html{scroll-behavior:smooth}
       ctx.save();
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.strokeStyle = 'rgba(224,255,255,.55)';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.text, .55);
       ctx.lineWidth = Math.max(1, cell * 0.07);
       smoothTrace(smoothed);
       ctx.stroke();
@@ -4338,12 +4827,12 @@ html{scroll-behavior:smooth}
       var pt = arcPoint(travel);
       if (pt) {
         var g2 = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, cell * 0.95);
-        g2.addColorStop(0, 'rgba(255,255,255,.95)');
-        g2.addColorStop(0.35, 'rgba(103,232,249,.5)');
-        g2.addColorStop(1, 'rgba(34,211,238,0)');
+        g2.addColorStop(0, canvasRGBA(CANVAS_COLORS.text, .95));
+        g2.addColorStop(0.35, canvasRGBA(CANVAS_COLORS.accent, .5));
+        g2.addColorStop(1, canvasRGBA(CANVAS_COLORS.accent, 0));
         ctx.fillStyle = g2;
         ctx.beginPath(); ctx.arc(pt.x, pt.y, cell * 0.95, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = CANVAS_COLORS.text;
         ctx.beginPath(); ctx.arc(pt.x, pt.y, Math.max(2, cell * 0.14), 0, TAU); ctx.fill();
       }
     }
@@ -4352,12 +4841,10 @@ html{scroll-behavior:smooth}
     sx = ox + (START.x + 0.5) * cell;
     sy = oy + (START.y + 0.5) * cell;
     ctx.save();
-    ctx.shadowColor = '#22d3ee';
-    ctx.shadowBlur = 14;
-    ctx.strokeStyle = '#67e8f9';
+    ctx.strokeStyle = CANVAS_COLORS.accent;
     ctx.lineWidth = Math.max(2, cell * 0.1);
     ctx.beginPath(); ctx.arc(sx, sy, cell * 0.3, 0, TAU); ctx.stroke();
-    ctx.fillStyle = 'rgba(34,211,238,.35)';
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.accent, .35);
     ctx.beginPath(); ctx.arc(sx, sy, cell * 0.16, 0, TAU); ctx.fill();
     ctx.restore();
 
@@ -4365,9 +4852,7 @@ html{scroll-behavior:smooth}
     gx = ox + (GOAL.x + 0.5) * cell;
     gy = oy + (GOAL.y + 0.5) * cell;
     ctx.save();
-    ctx.shadowColor = '#e879f9';
-    ctx.shadowBlur = 14;
-    ctx.strokeStyle = '#f0abfc';
+    ctx.strokeStyle = CANVAS_COLORS.warn;
     ctx.lineWidth = Math.max(1.6, cell * 0.08);
     ctx.beginPath(); ctx.arc(gx, gy, cell * 0.32, 0, TAU); ctx.stroke();
     ctx.beginPath();
@@ -4379,7 +4864,7 @@ html{scroll-behavior:smooth}
     ctx.save();
     ctx.translate(gx, gy);
     ctx.rotate(clock * 0.8);
-    ctx.strokeStyle = 'rgba(232,121,249,.8)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .8);
     ctx.lineWidth = Math.max(1.2, cell * 0.06);
     for (i = 0; i < 4; i++) {
       ctx.rotate(Math.PI / 2);
@@ -4687,7 +5172,7 @@ html{scroll-behavior:smooth}
   }
 
   function grid(ctx, w, h, zeroLine) {
-    ctx.strokeStyle = 'rgba(27,42,65,.9)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .9);
     ctx.lineWidth = 1;
     ctx.strokeRect(3.5, 3.5, w - 7, h - 7);
     ctx.beginPath();
@@ -4695,12 +5180,12 @@ html{scroll-behavior:smooth}
       var gy = Math.round(4 + (h - 8) * i / 4) + 0.5;
       ctx.moveTo(4, gy); ctx.lineTo(w - 4, gy);
     }
-    ctx.strokeStyle = 'rgba(27,42,65,.5)';
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .5);
     ctx.stroke();
     if (zeroLine) {
       ctx.beginPath();
       ctx.moveTo(4, zeroLine + 0.5); ctx.lineTo(w - 4, zeroLine + 0.5);
-      ctx.strokeStyle = 'rgba(127,150,184,.45)';
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.text, .45);
       ctx.stroke();
     }
   }
@@ -4710,7 +5195,7 @@ html{scroll-behavior:smooth}
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = color;
     ctx.fillText(left, 7, h - 5);
-    ctx.fillStyle = 'rgba(127,150,184,.8)';
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.text, .8);
     ctx.fillText(right, Math.max(7, w - 74), h - 5);
   }
 
@@ -4734,7 +5219,7 @@ html{scroll-behavior:smooth}
     var n = arr.length;
     if (n >= 2) {
       var stepX = (w - 8) / (TEL_N - 1);
-      pidCtx.strokeStyle = 'rgba(34,211,238,.95)';
+      pidCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .95);
       pidCtx.lineWidth = 1.5;
       pidCtx.beginPath();
       for (i = 0; i < n; i++) {
@@ -4747,7 +5232,7 @@ html{scroll-behavior:smooth}
 
     var cur = n ? arr[n - 1] : 0;
     caption(pidCtx, h, w, 'v ' + cur.toFixed(2) + ' m/s', 'max ' + scale.toFixed(2),
-            'rgba(34,211,238,.95)');
+            canvasRGBA(CANVAS_COLORS.accent, .95));
   }
 
   /* ==================================================================
@@ -4781,13 +5266,13 @@ html{scroll-behavior:smooth}
       }
       filtCtx.stroke();
     }
-    trace(m, 'rgba(251,191,36,.95)');   // measured (yellow)
-    trace(f, 'rgba(52,211,153,.95)');   // filtered (green)
+    trace(m, canvasRGBA(CANVAS_COLORS.warn, .95));   // measured (yellow)
+    trace(f, canvasRGBA(CANVAS_COLORS.success, .95));   // filtered (green)
 
     var curM = m.length ? m[m.length - 1] : 0;
     var curF = f.length ? f[f.length - 1] : 0;
     caption(filtCtx, h, w, 'meas ' + curM.toFixed(2) + ' · filt ' + curF.toFixed(2) + ' m',
-            'max ' + scale.toFixed(2), 'rgba(251,191,36,.95)');
+            'max ' + scale.toFixed(2), canvasRGBA(CANVAS_COLORS.warn, .95));
 
     // running means are the actual research result: filtering must lower them
     if (el.filterReadout && m.length > 2) {
@@ -4821,7 +5306,7 @@ html{scroll-behavior:smooth}
     var ex = cx + S.estX * s,   ey = cy + truthY * s;
 
     // measurement residual (truth -> measured)
-    ovCtx.strokeStyle = 'rgba(251,191,36,.55)';
+    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .55);
     ovCtx.lineWidth = 1;
     ovCtx.setLineDash([3, 4]);
     ovCtx.beginPath();
@@ -4830,17 +5315,17 @@ html{scroll-behavior:smooth}
     ovCtx.setLineDash([]);
 
     // yellow: noisy measurement
-    ovCtx.strokeStyle = 'rgba(251,191,36,.95)';
+    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .95);
     ovCtx.lineWidth = 1.6;
     ovCtx.beginPath(); ovCtx.arc(mx, my, 6.5, 0, Math.PI * 2); ovCtx.stroke();
 
     // green: complementary filter estimate
-    ovCtx.fillStyle = 'rgba(52,211,153,.95)';
+    ovCtx.fillStyle = canvasRGBA(CANVAS_COLORS.success, .95);
     ovCtx.beginPath(); ovCtx.arc(ex, ey, 3.4, 0, Math.PI * 2); ovCtx.fill();
 
     // red: ground truth (always the true pose)
-    ovCtx.fillStyle = 'rgba(248,113,113,.95)';
-    ovCtx.strokeStyle = 'rgba(6,12,20,.9)';
+    ovCtx.fillStyle = canvasRGBA(CANVAS_COLORS.danger, .95);
+    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.bg, .9);
     ovCtx.lineWidth = 1.2;
     ovCtx.beginPath(); ovCtx.arc(tx, ty, 4.6, 0, Math.PI * 2); ovCtx.fill(); ovCtx.stroke();
   }
@@ -4976,5 +5461,6 @@ html{scroll-behavior:smooth}
   }
 })();
 </script>
+
 </body>
 </html>

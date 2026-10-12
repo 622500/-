@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D View Client · Robot Teleoperation Console</title>
+
+<!-- =====================================================================
+     3D VIEW CLIENT  (pure renderer — embedded via <iframe>)
+
+     This page is a PURE CLIENT. It contains:
+       * no physics engine
+       * no path planning (no A*, no collision response, no control loop)
+     It only RENDERS what it is told, and it is told directly:
+
+        window.parent.state   <-- LIVE physics object, read every frame
+
+     PRIMARY DATA PATH (embedded mode)
+       The console embeds this page in a same-origin iframe and hands out a
+       read-only property:
+
+           window.parent.state  ->  { x, y, yaw, obstacles, path, nav, ... }
+
+       Because it is the parent's own object (same origin), no message
+       channel, no polling timer and no serialisation are involved: the
+       render loop below dereferences parentState.x / .y / .yaw and the
+       obstacle/path arrays each requestAnimationFrame tick. The console is
+       thus still the single source of truth and this page cannot write to
+       it — a copy-free read of the live pose.
+
+       Running inside the console's visual viewport also means rAF is not
+       background-throttled, which is exactly what the previous tab-based
+       integration suffered from.
+
+     Parent world contract (same metric convention as the 2D console):
+       x in [-9, 9], y in [-5.75, 5.75], +Y is DOWN on the 2D screen,
+       heading = (cos yaw, sin yaw).  Into 3D:  x -> x,  y -> z,  yaw -> -yaw.
+       obstacles -> [{x0,y0,x1,y1}] arena AABBs, path -> { points:[{x,y}] }.
+
+     SECONDARY DATA PATH (stand-alone mode)
+       Opened directly (no embedder) this page falls back to the old
+       BroadcastChannel("robot-telemetry") feed, so the standalone page and
+       the GitHub Pages link keep working unchanged. The link is optional:
+       without it the page simply reports OFFLINE and keeps rendering.
+       The outbound BroadcastChannel("robot-command") is only used in that
+       stand-alone mode; when embedded, the parent's state is read-only.
+
+     Testing hook (opt-in, unchecked by default): ticking "simulate test
+     telemetry" feeds synthetic frames — moving robot, obstacles, fake path —
+     through the same ingest() path so the projection logic stays provable.
+     It is never used while the parent state is available.
+     ===================================================================== -->
+
+<style>
+  :root {
+    --bg:      #070b10;
+    --panel:   rgba(11, 17, 24, 0.86);
+    --line:    #1d2b3a;
+    --line-hi: #2b4a63;
+    --text:    #c9d7e4;
+    --dim:     #6b8299;
+    --cyan:    #22d3ee;
+    --green:   #22c55e;
+    --red:     #ef4444;
+    --amber:   #f59e0b;
+    --violet:  #a855f7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
+  }
+  #scene { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+
+  .panel {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.55);
+    backdrop-filter: blur(9px);
+    -webkit-backdrop-filter: blur(9px);
+  }
+  .panel h1, .panel h2 {
+    margin: 0; font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  }
+
+  /* ---------- top-left: identity + live readout ---------- */
+  #hud {
+    top: 14px; left: 14px; width: 236px; padding: 10px 12px 11px;
+  }
+  #hud h1 { color: var(--cyan); font-size: 12px; }
+  #hud .sub { color: var(--dim); font-size: 10px; margin-top: 3px; letter-spacing: .06em; }
+
+  #status {
+    display: flex; align-items: center; gap: 6px;
+    margin: 9px 0 8px; padding: 5px 8px;
+    border: 1px solid var(--line); border-radius: 6px;
+    font-size: 10px; letter-spacing: .08em; color: var(--dim);
+  }
+  #dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--amber); box-shadow: 0 0 8px currentColor;
+    color: var(--amber); flex: 0 0 auto;
+  }
+  #status.live   #dot { background: var(--green); color: var(--green); animation: pulse 1.6s infinite; }
+  #status.fake   #dot { background: var(--amber); color: var(--amber); }
+  #status.offline #dot { background: var(--red);   color: var(--red); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+
+  .rows { display: grid; grid-template-columns: 62px 1fr; gap: 3px 8px; font-size: 11px; }
+  .rows .k { color: var(--dim); }
+  .rows .v { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+  .rows .v.hi { color: var(--cyan); }
+
+  /* ---------- bottom-left: controls ---------- */
+  #controls { left: 14px; bottom: 14px; width: 236px; padding: 10px 12px 12px; }
+  #controls h2 { color: var(--dim); margin-bottom: 8px; }
+
+  button {
+    width: 100%; cursor: pointer; font-family: inherit; font-size: 11px;
+    color: var(--text); background: #12202c;
+    border: 1px solid var(--line-hi); border-radius: 6px;
+    padding: 7px 9px; letter-spacing: .05em;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  button:hover  { background: #172b3a; border-color: var(--cyan); }
+  button:active { transform: translateY(1px); }
+  button.primary {
+    background: rgba(34,211,238,.14); border-color: rgba(34,211,238,.55); color: #d6f8ff;
+  }
+  button.primary:hover { background: rgba(34,211,238,.24); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .hint { color: var(--dim); font-size: 10px; margin-top: 9px; line-height: 1.5; }
+
+  .switch {
+    display: flex; align-items: center; gap: 7px; margin-top: 9px;
+    color: var(--dim); font-size: 10px; cursor: pointer; user-select: none;
+  }
+  .switch input { accent-color: var(--cyan); margin: 0; cursor: pointer; }
+
+  /* ---------- top-right: 2D minimap ---------- */
+  #mini-panel { top: 14px; right: 14px; padding: 0; overflow: hidden; }
+  #mini-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 9px; border-bottom: 1px solid var(--line);
+    color: var(--dim); font-size: 10px; letter-spacing: .12em;
+  }
+  #mini-head b { color: var(--cyan); font-weight: 600; }
+  #minimap { display: block; width: 200px; height: 150px; background: #0b1016; }
+  #mini-foot {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    padding: 5px 9px; border-top: 1px solid var(--line);
+    color: var(--dim); font-size: 9px; letter-spacing: .04em;
+  }
+  .key { display: inline-flex; align-items: center; gap: 4px; }
+  .key i { width: 7px; height: 7px; border-radius: 1px; display: inline-block; }
+  .key i.dot { border-radius: 50%; }
+  .key i.dash { width: 10px; height: 0; border-top: 2px dashed var(--cyan); border-radius: 0; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 10px);
+    padding: 7px 14px; border-radius: 999px;
+    background: rgba(12,20,28,.94); border: 1px solid var(--line-hi);
+    color: var(--cyan); font-size: 11px; letter-spacing: .04em;
+    opacity: 0; pointer-events: none; transition: opacity .22s, transform .22s;
+    box-shadow: 0 8px 24px rgba(0,0,0,.6);
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ---------- fatal error ---------- */
+  #fatal {
+    display: none; position: fixed; inset: 0; z-index: 50;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(7,11,16,.96); padding: 30px;
+  }
+  #fatal.show { display: flex; }
+  #fatal .box { max-width: 520px; line-height: 1.6; }
+  #fatal h3 { color: var(--red); margin: 0 0 10px; font-size: 14px; }
+  #fatal code { color: var(--amber); }
+</style>
+</head>
+<body>
+
+<!-- WebGL surface (Three.js renders into this) -->
+<canvas id="scene"></canvas>
+
+<!-- ------------------------------ HUD ------------------------------ -->
+<div id="hud" class="panel">
+  <h1>3D View Client</h1>
+  <div class="sub">three.js · orbit · 2D minimap</div>
+
+  <div id="status" class="offline"><span id="dot"></span><span id="statusText">OFFLINE · listening…</span></div>
+
+  <div class="rows">
+    <div class="k">robot x</div><div class="v hi" id="rdX">0.00</div>
+    <div class="k">robot y</div><div class="v hi" id="rdY">0.00</div>
+    <div class="k">yaw</div>    <div class="v" id="rdYaw">0.0°</div>
+    <div class="k">obstacles</div><div class="v" id="rdObs">0</div>
+    <div class="k">path pts</div><div class="v" id="rdPath">0</div>
+    <div class="k">packets</div><div class="v" id="rdPkt">0</div>
+  </div>
+</div>
+
+<!-- --------------------------- Minimap ----------------------------- -->
+<div id="mini-panel" class="panel">
+  <div id="mini-head"><span>MINIMAP · 2D</span><b>X[-9,9] Y[-5.75,5.75]</b></div>
+  <canvas id="minimap" width="200" height="150"></canvas>
+  <div id="mini-foot">
+    <span class="key"><i class="dot" style="background:#22c55e"></i>robot</span>
+    <span class="key"><i style="background:#ef4444"></i>obstacle</span>
+    <span class="key"><i class="dash"></i>A* path</span>
+    <span class="key"><i class="dot" style="background:#a855f7"></i>target</span>
+  </div>
+</div>
+
+<!-- --------------------------- Controls ---------------------------- -->
+<div id="controls" class="panel">
+  <h2>Command Sender</h2>
+  <button class="primary" id="btnTest">Send Test Target · Go to (5, 5)</button>
+  <div class="grid2">
+    <button data-tx="0"  data-ty="0">→ (0, 0)</button>
+    <button data-tx="-6" data-ty="3">→ (-6, 3)</button>
+    <button data-tx="7"  data-ty="-4">→ (7, -4)</button>
+    <button id="btnCam">Reset Camera</button>
+  </div>
+
+  <label class="switch" title="ON = synthetic setInterval telemetry · OFF = listen to the robot-telemetry BroadcastChannel (default)">
+    <input type="checkbox" id="chkSim" /> simulate test telemetry (setInterval)
+  </label>
+
+  <div class="hint">
+    data in · <b id="hintIn">parent state</b><br />
+    commands out · <b id="hintOut">—</b><br />
+    drag = orbit · wheel = zoom · right-drag = pan
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="fatal">
+  <div class="box">
+    <h3>Three.js failed to load</h3>
+    <div>Three.js 加载失败，请确认 vendor 文件夹存在且包含依赖文件。</div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     APPLICATION  (defines window.__startViewer; the loader below calls it)
+     ===================================================================== -->
+<script>
+window.__startViewer = function () {
+  'use strict';
+
+  /* ==================================================================
+     0. CONFIG  — single place to change the wire contract
+     ================================================================== */
+  var CONFIG = {
+    telemetryChannel: 'robot-telemetry',   // <- IN   (main console -> here)
+    commandChannel:   'robot-command',     // <- OUT  (here -> main console)
+    world:  { minX: -9.0, maxX: 9.0, minY: -5.75, maxY: 5.75 },  // physics arena
+    gridSize: 20,                          // dark industrial floor, 20 x 20 units
+    fakeHz: 20,                            // synthetic telemetry rate
+    testTarget: { x: 5, y: 5 }             // "Send Test Target" payload
+  };
+  var W = CONFIG.world;
+
+  /* ==================================================================
+     1A. PARENT STATE ACCESS  — the primary data path
+
+     The console embeds this page in a same-origin <iframe> and exposes the
+     live physics object as the read-only property `state` on its window:
+
+         console (index.html)               3d-view.html (this frame)
+         ----------------------             -------------------------
+         state.x / .y / .yaw        --->    parentState.x / .y / .yaw
+         state.obstacles            --->    parentState.obstacles
+         state.path.points          --->    parentState.path.points
+         state.nav                  --->    parentState.nav
+
+     `parentState` is a getter, not a snapshot taken at parse time: the
+     iframe's script can finish before the console's does, so each access
+     re-reads window.parent.state and the render loop below therefore always
+     sees the CURRENT object — no stale binding, exactly the live pose.
+     Every access is guarded: a missing parent, a not-yet-initialised
+     console or a cross-origin embed all degrade to `null`, which switches
+     the page back to the BroadcastChannel path instead of throwing.
+     ================================================================== */
+  function parentState() {
+    try {
+      var p = window.parent;
+      if (!p || p === window) { return null; }          // stand-alone: no parent to read
+      var s = p.state;                                   // cross-origin access throws -> caught
+      return (s && typeof s === 'object') ? s : null;
+    } catch (e) { return null; }
+  }
+
+  function num(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; }
+
+  // Same values, in order? Used to refresh the 3D meshes only when the
+  // parent actually changed them (the console hands out live array refs).
+  function samePoints(a, b) {
+    if (a === b) { return true; }
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i++) {
+      var p = a[i], q = b[i];
+      if (!p || !q) { return false; }
+      var px = (p.x !== undefined) ? p.x : p[0];
+      var py = (p.y !== undefined) ? p.y : p[1];
+      var qx = (q.x !== undefined) ? q.x : q[0];
+      var qy = (q.y !== undefined) ? q.y : q[1];
+      if (px !== qx || py !== qy) { return false; }
+    }
+    return true;
+  }
+
+  function sameCount(a, b) { return (!a || !b) ? (a === b) : (a.length === b.length); }
+
+  // The console hands out its live obstacle array. Compare the AABB fields
+  // position by position so the 3D obstacle meshes are rebuilt only when the
+  // console actually changed geometry (never per frame, never per broadcast).
+  function sameBoxes(a, b) {
+    if (a === b) { return true; }
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i++) {
+      var p = a[i] || {}, q = b[i] || {};
+      if (p.x0 !== q.x0 || p.y0 !== q.y0 || p.x1 !== q.x1 || p.y1 !== q.y1) { return false; }
+    }
+    return true;
+  }
+
+  /* ==================================================================
+     2. SHARED STATE  — the single source of truth for both views
+     ================================================================== */
+  var state = {
+    robot:     { x: 0, y: 0, yaw: 0 },
+    obstacles: [],            // [{ x, y, hw, hh }] centred boxes, world units
+    path:      [],            // [{ x, y }] waypoints from the console's A*
+    target:    null,          // { x, y } | null
+    source:    'offline',     // 'offline' | 'parent' | 'fake' | 'live'
+    packets:   0,
+    lastRx:    0
+  };
+
+  /* ==================================================================
+     2. SANITISERS — accept every shape the console may emit
+     ================================================================== */
+  function finite(n) { return typeof n === 'number' && isFinite(n); }
+
+  // {x0,y0,x1,y1} | {x,y,w,h} | {x,y,r} | {x,y,size} | {x,y} | [x,y] | [x,y,w,h] | [x,y,r]
+  function normalizeObstacle(o) {
+    if (!o) { return null; }
+    var x, y, hw = 0.5, hh = 0.5, raw;
+
+    if (Array.isArray(o)) {
+      x = +o[0]; y = +o[1];
+      if (o.length >= 4)      { hw = Math.abs(+o[2]) / 2; hh = Math.abs(+o[3]) / 2; }
+      else if (o.length === 3) { hw = hh = Math.abs(+o[2]); }
+    } else if (typeof o === 'object') {
+      if (finite(o.x0) && finite(o.y0) && finite(o.x1) && finite(o.y1)) {   // console AABB
+        x = (o.x0 + o.x1) / 2; y = (o.y0 + o.y1) / 2;
+        hw = Math.abs(o.x1 - o.x0) / 2; hh = Math.abs(o.y1 - o.y0) / 2;
+      } else {
+        x = finite(o.x) ? o.x : o.cx;
+        y = finite(o.y) ? o.y : o.cy;
+        if (finite(o.w) && finite(o.h))   { hw = Math.abs(o.w) / 2; hh = Math.abs(o.h) / 2; }
+        else if (finite(o.r))             { hw = hh = Math.abs(o.r); }
+        else if (finite(o.size))          { hw = hh = Math.abs(o.size) / 2; }
+      }
+    } else {
+      return null;
+    }
+    if (!finite(x) || !finite(y)) { return null; }
+    raw = hw; hw = (finite(raw) && raw > 0.02) ? raw : 0.5;
+    raw = hh; hh = (finite(raw) && raw > 0.02) ? raw : 0.5;
+    return { x: x, y: y, hw: hw, hh: hh };
+  }
+
+  function normalizePoint(p) {
+    if (!p) { return null; }
+    var x, y;
+    if (Array.isArray(p)) { x = +p[0]; y = +p[1]; }
+    else if (typeof p === 'object') { x = +(finite(p.x) ? p.x : p.cx); y = +(finite(p.y) ? p.y : p.cy); }
+    else { return null; }
+    return (finite(x) && finite(y)) ? { x: x, y: y } : null;
+  }
+
+  /* ==================================================================
+     3. TELEMETRY INGEST
+     ================================================================== */
+  function ingest(d, source) {
+    if (!d || typeof d !== 'object') { return false; }
+    // Strict pose contract: robotX/robotY must be finite numbers or the packet
+    // is not telemetry at all and is dropped. robotYaw is adopted when present.
+    if (!finite(d.robotX) || !finite(d.robotY)) { return false; }   // not a pose packet
+
+    state.robot.x   = d.robotX;
+    state.robot.y   = d.robotY;
+    state.robot.yaw = finite(d.robotYaw) ? d.robotYaw : state.robot.yaw;
+
+    if (Array.isArray(d.obstacles)) {
+      var obs = [], i;
+      for (i = 0; i < d.obstacles.length; i++) {
+        var no = normalizeObstacle(d.obstacles[i]);
+        if (no) { obs.push(no); }
+      }
+      state.obstacles = obs;
+    }
+    if (Array.isArray(d.path)) {
+      var pts = [], np;
+      for (var j = 0; j < d.path.length; j++) {
+        np = normalizePoint(d.path[j]);
+        if (np) { pts.push(np); }
+      }
+      state.path = pts;
+    }
+    if (finite(d.targetX) && finite(d.targetY)) {
+      state.target = { x: d.targetX, y: d.targetY };
+    } else if (d.target && finite(d.target.x) && finite(d.target.y)) {
+      state.target = { x: d.target.x, y: d.target.y };
+    } else if (d.target === null) {
+      state.target = null;
+    }
+
+    state.source = source;
+    state.lastRx = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    state.packets++;
+
+    // Live frame: write the pose straight into the 3D model now instead of
+    // waiting for the next rAF tick, then guarantee the loop that keeps it on
+    // screen is running. If initThree() has not finished yet, the pose is
+    // already in state.robot and animate()'s syncRobot3D() applies it.
+    if (three.robot) { syncRobot3D(); }
+    ensureRenderLoop();
+
+    // first genuine packet wins: the testing hook stands down by itself
+    if (source === 'live' && fake.enabled) { setSimulation(false); }
+
+    three.pathDirty = true;
+    three.obsDirty  = true;
+    updateStatus();
+    return true;
+  }
+
+  /* ==================================================================
+     3A. PARENT INGEST  — the embedded path, called EVERY frame
+
+     Reads window.parent.state directly (no channel, no timer, no copy) and
+     maps it into the same internal `state`/`three` structures the telemetry
+     path uses, so both the 3D scene and the minimap behave identically.
+     Returns false while no live parent state is readable — that is the
+     signal for the render loop to stay on the broadcast path.
+
+     Wire contract with the console's physics object:
+       parentState.x, .y, .yaw        -> robot pose (metres / radians)
+       parentState.obstacles          -> [{x0,y0,x1,y1}] arena AABBs
+       parentState.path.points        -> [{x,y}] A* waypoints
+       parentState.nav.{active,x,y}   -> optional goal marker
+     ================================================================== */
+  function syncParent3D() {
+    var p = parentState();
+    if (!p) { return false; }
+
+    var px = num(p.x), py = num(p.y);
+    if (px === null || py === null) { return false; }   // half-built console: not ready yet
+
+    var pyaw = num(p.yaw);
+
+    state.robot.x   = px;
+    state.robot.y   = py;
+    state.robot.yaw = (pyaw === null) ? state.robot.yaw : pyaw;
+
+    // obstacles: the console already emits {x0,y0,x1,y1} AABBs
+    if (Array.isArray(p.obstacles) && !sameBoxes(p.obstacles, lastParentObstacles)) {
+      lastParentObstacles = p.obstacles;
+      var i, no, obs = [];
+      for (i = 0; i < p.obstacles.length; i++) {
+        no = normalizeObstacle(p.obstacles[i]);
+        if (no) { obs.push(no); }
+      }
+      state.obstacles = obs;
+      three.obsDirty = true;
+    }
+
+    // A* path lives on the nested path object
+    var rawPath = (p.path && Array.isArray(p.path.points)) ? p.path.points : null;
+    if (rawPath && !samePoints(rawPath, state.path)) {
+      var j, np, pts = [];
+      for (j = 0; j < rawPath.length; j++) {
+        np = normalizePoint(rawPath[j]);
+        if (np) { pts.push(np); }
+      }
+      state.path = pts;
+      three.pathDirty = true;
+    }
+
+    // goal marker (optional)
+    if (p.nav && p.nav.active && num(p.nav.x) !== null && num(p.nav.y) !== null) {
+      state.target = { x: num(p.nav.x), y: num(p.nav.y) };
+    } else {
+      state.target = null;
+    }
+
+    state.source = 'parent';
+    return true;
+  }
+
+  /* ==================================================================
+     3B. PARENT MODE  — is the embedded path live right now?
+         Never consulted while the testing hook is running, so a synthetic
+         demo cannot fight the console for the scene.
+     ================================================================== */
+  function usingParent() {
+    if (fake.enabled) { return false; }
+    var p = parentState();
+    return !!(p && num(p.x) !== null && num(p.y) !== null);
+  }
+
+  // Last raw arrays observed on the parent, used purely as change detectors.
+  var lastParentObstacles = null;
+
+  /* ==================================================================
+     4. BROADCAST CHANNELS
+     ================================================================== */
+  var rx = null, tx = null;
+  try { rx = new BroadcastChannel(CONFIG.telemetryChannel); } catch (e) { rx = null; }
+  try { tx = new BroadcastChannel(CONFIG.commandChannel); }   catch (e) { tx = null; }
+
+  if (rx) {
+    rx.onmessage = function (ev) { ingest(ev.data, 'live'); };
+  }
+  // fallback: same-page / iframe parents that prefer postMessage
+  window.addEventListener('message', function (ev) {
+    if (ev && ev.data) { ingest(ev.data, 'live'); }
+  });
+
+  function broadcast(payload) {
+    var sent = false;
+    if (tx) { try { tx.postMessage(payload); sent = true; } catch (e) { /* channel closed */ } }
+    try {
+      if (window.parent && window.parent !== window) { window.parent.postMessage(payload, '*'); sent = true; }
+    } catch (e2) { /* cross-origin parent */ }
+    return sent;
+  }
+
+  /* --- control command sender -------------------------------------- */
+  function sendTarget(x, y) {
+    var msg = { command: 'SET_TARGET', x: x, y: y };
+    broadcast(msg);
+    if (state.source !== 'live') { state.target = { x: x, y: y }; }   // echo locally while offline
+    toast('\u2192 SET_TARGET (' + x + ', ' + y + ')');
+  }
+
+  /* ==================================================================
+     5. UI  — toast, status pill, readouts, buttons
+     ================================================================== */
+  var dom = {
+    scene:      document.getElementById('scene'),
+    minimap:    document.getElementById('minimap'),
+    status:     document.getElementById('status'),
+    statusText: document.getElementById('statusText'),
+    rdX:   document.getElementById('rdX'),   rdY:    document.getElementById('rdY'),
+    rdYaw: document.getElementById('rdYaw'), rdObs:  document.getElementById('rdObs'),
+    rdPath:document.getElementById('rdPath'),rdPkt:  document.getElementById('rdPkt'),
+    hintIn: document.getElementById('hintIn'), hintOut: document.getElementById('hintOut'),
+    toast: document.getElementById('toast'),
+    sim:   document.getElementById('chkSim')
+  };
+
+  var toastTimer = null;
+  function toast(text) {
+    dom.toast.textContent = text;
+    dom.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { dom.toast.classList.remove('show'); }, 1500);
+  }
+
+  function updateStatus() {
+    var cls, label;
+    if (state.source === 'parent')     { cls = 'live';    label = 'LINKED \u00B7 parent physics state'; }
+    else if (state.source === 'live')  { cls = 'live';    label = 'LIVE \u00B7 robot-telemetry'; }
+    else if (state.source === 'fake')  { cls = 'fake';    label = 'SIMULATED \u00B7 test hook'; }
+    else                               { cls = 'offline'; label = 'OFFLINE \u00B7 listening\u2026'; }
+    dom.status.className = cls;
+    dom.statusText.textContent = label;
+
+    // The embedded frame is a read-only view: it never sends commands back,
+    // so the hint must not advertise the outbound channel there.
+    if (dom.hintIn && dom.hintOut) {
+      var embedded = (state.source === 'parent');
+      dom.hintIn.innerHTML  = embedded ? 'window.parent.state' : 'robot-telemetry';
+      dom.hintOut.innerHTML = embedded ? 'read-only (console owns state)' : 'robot-command';
+    }
+  }
+
+  function updateReadout() {
+    dom.rdX.textContent    = state.robot.x.toFixed(2);
+    dom.rdY.textContent    = state.robot.y.toFixed(2);
+    dom.rdYaw.textContent  = (state.robot.yaw * 180 / Math.PI).toFixed(1) + '\u00B0';
+    dom.rdObs.textContent  = state.obstacles.length;
+    dom.rdPath.textContent = state.path.length;
+    // Embedded mode pushes no packets — count frames actually read from the
+    // parent instead, so the HUD still proves the link is alive.
+    dom.rdPkt.textContent  = (state.source === 'parent') ? parentFrames : state.packets;
+  }
+
+  document.getElementById('btnTest').addEventListener('click', function () {
+    sendTarget(CONFIG.testTarget.x, CONFIG.testTarget.y);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('button[data-tx]'), function (b) {
+    b.addEventListener('click', function () { sendTarget(+b.dataset.tx, +b.dataset.ty); });
+  });
+
+  /* ==================================================================
+     6. TESTING HOOK — synthetic telemetry via setInterval
+        OPT-IN ONLY (checkbox off by default). The page's real data
+        source is the robot-telemetry BroadcastChannel; switching the
+        box on overlays synthetic frames until a live packet arrives.
+     ================================================================== */
+  var fake = { enabled: false, timer: null, t: 0 };
+
+  var FAKE_OBSTACLES = [                    // console-style AABBs
+    { x0:  1.4, y0:  1.0, x1:  2.6, y1:  2.2 },
+    { x0: -3.6, y0: -2.5, x1: -2.6, y1: -1.5 },
+    { x0:  4.2, y0:  3.2, x1:  5.8, y1:  4.6 },
+    { x0: -6.4, y0:  2.8, x1: -5.4, y1:  4.2 },
+    { x0:  0.4, y0: -4.6, x1:  1.6, y1: -3.5 },
+    { x0: -1.8, y0:  0.6, x1: -0.8, y1:  1.4 }
+  ];
+
+  function fakeTick() {
+    fake.t += 1 / CONFIG.fakeHz;
+    var t = fake.t;
+
+    // figure-eight: x = 6 sin(t/2),  y = 4 sin(t)  -> analytic heading
+    var x    = 6 * Math.sin(t * 0.5);
+    var y    = 4 * Math.sin(t);
+    var yaw  = Math.atan2(4 * Math.cos(t), 3 * Math.cos(t * 0.5));
+
+    // fake A* path: a smooth arc from the robot toward the test target
+    var path = [], steps = 14, i, u;
+    for (i = 0; i <= steps; i++) {
+      u = i / steps;
+      path.push({
+        x: x + (CONFIG.testTarget.x - x) * u,
+        y: y + (CONFIG.testTarget.y - y) * u + Math.sin(u * Math.PI) * 0.9
+      });
+    }
+
+    ingest({
+      robotX: x, robotY: y, robotYaw: yaw,
+      obstacles: FAKE_OBSTACLES,
+      path: path,
+      targetX: CONFIG.testTarget.x, targetY: CONFIG.testTarget.y
+    }, 'fake');
+  }
+
+  function setSimulation(on) {
+    fake.enabled = !!on;
+    dom.sim.checked = fake.enabled;
+    if (fake.enabled) {
+      if (!fake.timer) { fake.timer = setInterval(fakeTick, 1000 / CONFIG.fakeHz); }
+      if (state.source === 'offline') { state.source = 'fake'; }
+    } else if (fake.timer) {
+      clearInterval(fake.timer);
+      fake.timer = null;
+      if (state.source === 'fake') { state.source = 'offline'; }
+    }
+    updateStatus();
+  }
+  dom.sim.addEventListener('change', function () { setSimulation(dom.sim.checked); });
+
+  /* ==================================================================
+     7. THREE.JS SCENE
+     ================================================================== */
+  var three = {
+    renderer: null, scene: null, camera: null, controls: null,
+    robot: null, wheels: [],
+    obsGroup: null, obsPool: [],
+    pathLine: null, pathPositions: null, pathDirty: true, obsDirty: true
+  };
+  var MAX_PATH_POINTS = 512;
+
+  function initThree() {
+    var T = window.THREE;
+
+    /* ---- renderer ---- */
+    var renderer = new T.WebGLRenderer({ canvas: dom.scene, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = T.PCFSoftShadowMap;
+    if (T.sRGBEncoding !== undefined) { renderer.outputEncoding = T.sRGBEncoding; }
+    three.renderer = renderer;
+
+    /* ---- scene + camera (isometric-ish) ---- */
+    var scene = new T.Scene();
+    scene.background = new T.Color(0x070b10);
+    scene.fog = new T.Fog(0x070b10, 34, 78);
+    three.scene = scene;
+
+    var camera = new T.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
+    three.camera = camera;
+    resetCamera(false);
+
+    /* ---- lighting ---- */
+    scene.add(new T.AmbientLight(0x8899bb, 0.55));
+    scene.add(new T.HemisphereLight(0x33465c, 0x05080c, 0.45));
+
+    var key = new T.DirectionalLight(0xffffff, 0.95);
+    key.position.set(11, 18, 7);
+    key.castShadow = true;
+    key.shadow.mapSize.width = 2048;
+    key.shadow.mapSize.height = 2048;
+    key.shadow.camera.near = 1;
+    key.shadow.camera.far = 60;
+    key.shadow.camera.left = -14;
+    key.shadow.camera.right = 14;
+    key.shadow.camera.top = 14;
+    key.shadow.camera.bottom = -14;
+    key.shadow.bias = -0.0007;
+    scene.add(key);
+
+    var rim = new T.DirectionalLight(0x2ea8d8, 0.35);
+    rim.position.set(-10, 7, -9);
+    scene.add(rim);
+
+    /* ---- dark industrial grid floor (20 x 20 units) ---- */
+    var floorGeo = new T.PlaneGeometry(CONFIG.gridSize, CONFIG.gridSize);
+    var floorMat = new T.MeshStandardMaterial({ color: 0x0d141c, roughness: 0.92, metalness: 0.15 });
+    var floor = new T.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    var grid = new T.GridHelper(CONFIG.gridSize, CONFIG.gridSize, 0x2f5f7a, 0x18293a);
+    grid.position.y = 0.002;
+    grid.material.transparent = true;
+    grid.material.opacity = 0.85;
+    scene.add(grid);
+
+    // outline of the 2D physics arena (18 x 11.5) -> proves the 3D<->2D mapping
+    var arena = new T.LineLoop(
+      new T.BufferGeometry().setFromPoints([
+        new T.Vector3(W.minX, 0.012, W.minY), new T.Vector3(W.maxX, 0.012, W.minY),
+        new T.Vector3(W.maxX, 0.012, W.maxY), new T.Vector3(W.minX, 0.012, W.maxY)
+      ]),
+      new T.LineBasicMaterial({ color: 0x2b6b86 })
+    );
+    scene.add(arena);
+
+    /* ---- 3D differential-drive robot: blue chassis + 4 black wheels ---- */
+    var robot = new T.Group();
+    robot.position.set(0, 0, 0);
+
+    var chassis = new T.Mesh(
+      new T.BoxGeometry(0.9, 0.28, 0.68),                       // +X = forward
+      new T.MeshStandardMaterial({ color: 0x2f7bff, roughness: 0.35, metalness: 0.55 })
+    );
+    chassis.position.y = 0.30;
+    chassis.castShadow = true;
+    chassis.receiveShadow = true;
+    robot.add(chassis);
+
+    var deck = new T.Mesh(
+      new T.BoxGeometry(0.5, 0.1, 0.46),
+      new T.MeshStandardMaterial({ color: 0x1b4fa8, roughness: 0.5, metalness: 0.4 })
+    );
+    deck.position.y = 0.49;
+    deck.castShadow = true;
+    robot.add(deck);
+
+    var nose = new T.Mesh(
+      new T.BoxGeometry(0.1, 0.1, 0.12),
+      new T.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x0d6b7a, roughness: 0.4 })
+    );
+    nose.position.set(0.46, 0.32, 0);                            // forward indicator
+    robot.add(nose);
+
+    // 4 wheels: cylinder axis rotated onto Z (the axle), so they roll along X
+    var wheelGeo = new T.CylinderGeometry(0.17, 0.17, 0.13, 20);
+    var wheelMat = new T.MeshStandardMaterial({ color: 0x111417, roughness: 0.85, metalness: 0.1 });
+    var wpos = [[0.3, 0.32], [0.3, -0.32], [-0.3, 0.32], [-0.3, -0.32]];
+    for (var i = 0; i < wpos.length; i++) {
+      var wheel = new T.Mesh(wheelGeo, wheelMat);
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(wpos[i][0], 0.17, wpos[i][1]);
+      wheel.castShadow = true;
+      robot.add(wheel);
+      three.wheels.push(wheel);
+    }
+
+    scene.add(robot);
+    three.robot = robot;
+
+    /* ---- obstacles (mirrored from telemetry, visual only) ---- */
+    three.obsGroup = new T.Group();
+    scene.add(three.obsGroup);
+
+    /* ---- A* path as a dashed cyan line on the floor ---- */
+    three.pathPositions = new Float32Array(MAX_PATH_POINTS * 3);
+    var pathGeo = new T.BufferGeometry();
+    pathGeo.setAttribute('position', new T.BufferAttribute(three.pathPositions, 3));
+    pathGeo.setDrawRange(0, 0);
+    three.pathLine = new T.Line(pathGeo, new T.LineDashedMaterial({
+      color: 0x22d3ee, dashSize: 0.34, gapSize: 0.26, transparent: true, opacity: 0.95
+    }));
+    three.pathLine.frustumCulled = false;
+    scene.add(three.pathLine);
+
+    /* ---- OrbitControls (isometric default) ---- */
+    var controls = new T.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0.4, 0);
+    controls.minDistance = 6;
+    controls.maxDistance = 46;
+    controls.maxPolarAngle = Math.PI / 2 - 0.06;   // never dive under the floor
+    controls.update();
+    three.controls = controls;
+
+    window.addEventListener('resize', onResize);
+  }
+
+  function resetCamera(animate) {
+    var T = window.THREE;
+    if (!three.camera) { return; }
+    three.camera.position.set(13.5, 12.5, 13.5);   // isometric 3/4 view
+    three.camera.lookAt(0, 0.4, 0);
+    if (three.controls) {
+      three.controls.target.set(0, 0.4, 0);
+      three.controls.update();
+    }
+    if (animate) { toast('camera reset'); }
+  }
+
+  function onResize() {
+    if (!three.renderer) { return; }
+    var w = window.innerWidth, h = window.innerHeight;
+    three.camera.aspect = w / h;
+    three.camera.updateProjectionMatrix();
+    three.renderer.setSize(w, h, false);
+  }
+
+  /* ==================================================================
+     8. PER-FRAME SYNC: telemetry -> 3D
+     ================================================================== */
+  function syncRobot3D() {
+    // contract:  position.x = robotX,  position.z = robotY,  rotation.y = -robotYaw
+    three.robot.position.x = state.robot.x;
+    three.robot.position.z = state.robot.y;
+    three.robot.rotation.y = -state.robot.yaw;
+
+    // cosmetic: spin the wheels with forward speed (no physics involved)
+    var dx = state.robot.x - syncRobot3D.px;
+    var dy = state.robot.y - syncRobot3D.py;
+    var fwd = dx * Math.cos(state.robot.yaw) + dy * Math.sin(state.robot.yaw);
+    var spin = fwd / 0.17;
+    for (var i = 0; i < three.wheels.length; i++) { three.wheels[i].rotation.y -= spin; }
+    syncRobot3D.px = state.robot.x;
+    syncRobot3D.py = state.robot.y;
+  }
+  syncRobot3D.px = 0; syncRobot3D.py = 0;
+
+  function syncObstacles3D() {
+    var T = window.THREE, n = state.obstacles.length, i, m;
+
+    while (three.obsPool.length < n) {
+      m = new T.Mesh(
+        new T.BoxGeometry(1, 1, 1),
+        new T.MeshStandardMaterial({
+          color: 0xd23b3b, emissive: 0x3a0808, roughness: 0.6, metalness: 0.2,
+          transparent: true, opacity: 0.55
+        })
+      );
+      m.castShadow = true;
+      three.obsGroup.add(m);
+      three.obsPool.push(m);
+    }
+    for (i = 0; i < three.obsPool.length; i++) {
+      m = three.obsPool[i];
+      if (i >= n) { m.visible = false; continue; }
+      var o = state.obstacles[i];
+      m.visible = true;                                   // x -> x,  y -> z
+      m.position.set(o.x, 0.3, o.y);
+      m.scale.set(Math.max(0.15, o.hw * 2), 0.6, Math.max(0.15, o.hh * 2));
+    }
+  }
+
+  function syncPath3D() {
+    var n = Math.min(state.path.length, MAX_PATH_POINTS), i, p, arr = three.pathPositions;
+    for (i = 0; i < n; i++) {
+      p = state.path[i];
+      arr[i * 3]     = p.x;
+      arr[i * 3 + 1] = 0.02;      // just above the floor
+      arr[i * 3 + 2] = p.y;
+    }
+    var geo = three.pathLine.geometry;
+    geo.attributes.position.needsUpdate = true;
+    geo.setDrawRange(0, n);
+    three.pathLine.visible = n > 1;
+    if (n > 1) { three.pathLine.computeLineDistances(); }
+  }
+
+  /* ==================================================================
+     9. 2D MINIMAP  (redrawn every frame from the same state)
+        World X [-9,9], Y [-5.75,5.75] -> 200 x 150 canvas.
+        +Y in the world is DOWN on the canvas, matching the 2D console.
+     ================================================================== */
+  var mini = {
+    ctx: dom.minimap.getContext('2d'),
+    w: dom.minimap.width,     // 200
+    h: dom.minimap.height,    // 150
+    pad: 7, s: 1, ox: 0, oy: 0
+  };
+
+  (function fitMinimap() {
+    var wW = W.maxX - W.minX, wH = W.maxY - W.minY;
+    var availW = mini.w - mini.pad * 2, availH = mini.h - mini.pad * 2 - 10; // 10px footer for the axis label
+    mini.s  = Math.min(availW / wW, availH / wH);            // uniform scale: squares stay square
+    mini.ox = (mini.w - wW * mini.s) / 2;
+    mini.oy = (mini.h - wH * mini.s) / 2 - 3;
+  })();
+
+  function m2x(wx) { return mini.ox + (wx - W.minX) * mini.s; }
+  function m2y(wy) { return mini.oy + (wy - W.minY) * mini.s; }   // +y down, same as the console
+
+  function drawMinimap() {
+    var c = mini.ctx, i;
+    c.clearRect(0, 0, mini.w, mini.h);
+
+    /* background + arena plate */
+    c.fillStyle = '#0b1016';
+    c.fillRect(0, 0, mini.w, mini.h);
+    c.fillStyle = '#0e1721';
+    c.fillRect(m2x(W.minX), m2y(W.minY), (W.maxX - W.minX) * mini.s, (W.maxY - W.minY) * mini.s);
+
+    /* 1 m grid */
+    c.strokeStyle = 'rgba(120,180,220,0.10)';
+    c.lineWidth = 1;
+    c.beginPath();
+    for (i = W.minX; i <= W.maxX + 1e-6; i += 1) {
+      var gx = Math.round(m2x(i)) + 0.5;
+      c.moveTo(gx, m2y(W.minY)); c.lineTo(gx, m2y(W.maxY));
+    }
+    for (i = W.minY; i <= W.maxY + 1e-6; i += 1) {
+      var gy = Math.round(m2y(i)) + 0.5;
+      c.moveTo(m2x(W.minX), gy); c.lineTo(m2x(W.maxX), gy);
+    }
+    c.stroke();
+
+    /* axes through the origin (5 m major lines) */
+    c.strokeStyle = 'rgba(120,180,220,0.22)';
+    c.beginPath();
+    c.moveTo(Math.round(m2x(0)) + 0.5, m2y(W.minY)); c.lineTo(Math.round(m2x(0)) + 0.5, m2y(W.maxY));
+    c.moveTo(m2x(W.minX), Math.round(m2y(0)) + 0.5); c.lineTo(m2x(W.maxX), Math.round(m2y(0)) + 0.5);
+    c.stroke();
+
+    /* arena border */
+    c.strokeStyle = 'rgba(43,107,134,0.95)';
+    c.lineWidth = 1;
+    c.strokeRect(
+      Math.round(m2x(W.minX)) + 0.5, Math.round(m2y(W.minY)) + 0.5,
+      Math.round((W.maxX - W.minX) * mini.s), Math.round((W.maxY - W.minY) * mini.s)
+    );
+
+    /* A* path — dashed cyan */
+    if (state.path.length > 1) {
+      c.save();
+      c.setLineDash([5, 4]);
+      c.lineWidth = 1.6;
+      c.strokeStyle = 'rgba(34,211,238,0.95)';
+      c.lineJoin = 'round';
+      c.beginPath();
+      c.moveTo(m2x(state.path[0].x), m2y(state.path[0].y));
+      for (i = 1; i < state.path.length; i++) { c.lineTo(m2x(state.path[i].x), m2y(state.path[i].y)); }
+      c.stroke();
+      c.restore();
+    }
+
+    /* obstacles — red squares (drawn from the centred half extents) */
+    c.fillStyle = 'rgba(239,68,68,0.85)';
+    c.strokeStyle = 'rgba(255,140,140,0.95)';
+    c.lineWidth = 1;
+    for (i = 0; i < state.obstacles.length; i++) {
+      var o = state.obstacles[i];
+      var sx = m2x(o.x - o.hw), sy = m2y(o.y - o.hh);
+      var sw = Math.max(3, o.hw * 2 * mini.s), sh = Math.max(3, o.hh * 2 * mini.s);
+      c.fillRect(sx, sy, sw, sh);
+      c.strokeRect(Math.round(sx) + 0.5, Math.round(sy) + 0.5, Math.round(sw), Math.round(sh));
+    }
+
+    /* target — violet crosshair */
+    if (state.target) {
+      var tx = m2x(state.target.x), ty = m2y(state.target.y);
+      c.strokeStyle = 'rgba(168,85,247,0.95)';
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.moveTo(tx - 5, ty); c.lineTo(tx + 5, ty);
+      c.moveTo(tx, ty - 5); c.lineTo(tx, ty + 5);
+      c.stroke();
+      c.beginPath(); c.arc(tx, ty, 3.2, 0, Math.PI * 2); c.stroke();
+    }
+
+    /* robot — green dot + heading needle */
+    var rx = m2x(state.robot.x), ry = m2y(state.robot.y);
+    var hx = Math.cos(state.robot.yaw), hy = Math.sin(state.robot.yaw);
+    c.strokeStyle = 'rgba(34,197,94,0.9)';
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.moveTo(rx, ry);
+    c.lineTo(rx + hx * 10, ry + hy * 10);
+    c.stroke();
+
+    c.fillStyle = '#22c55e';
+    c.beginPath(); c.arc(rx, ry, 4.2, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = 'rgba(5,10,14,0.95)';
+    c.lineWidth = 1.2;
+    c.beginPath(); c.arc(rx, ry, 4.2, 0, Math.PI * 2); c.stroke();
+
+    /* axis caption */
+    c.fillStyle = 'rgba(107,130,153,0.9)';
+    c.font = '9px ui-monospace, monospace';
+    c.textAlign = 'center';
+    c.fillText('+x \u2192   +y \u2193', mini.w / 2, mini.h - 2);
+  }
+
+  /* ==================================================================
+     10. RENDER LOOP
+     ================================================================== */
+  var frame = 0;
+  var rafId = 0;
+  var parentFrames = 0;      // frames rendered from window.parent.state (HUD counter)
+  function animate() {
+    rafId = requestAnimationFrame(animate);
+    frame++;
+
+    // ---- telemetry -> 3D ------------------------------------------------
+    // Embedded mode reads the console's physics object directly; otherwise
+    // the broadcast/ingest path drives the scene. Either way the loop is the
+    // same and the 3D output is identical.
+    if (usingParent()) {
+      if (syncParent3D()) {
+        parentFrames++;
+        syncRobot3D();                                   // live pose, every frame
+        if (three.obsDirty)  { three.obsDirty = false;  syncObstacles3D(); }
+        if (three.pathDirty) { three.pathDirty = false; syncPath3D(); }
+        updateStatus();
+      }
+    } else {
+      syncRobot3D();                                     // pose already ingested
+      if (three.obsDirty)  { three.obsDirty = false;  syncObstacles3D(); }
+      if (three.pathDirty) { three.pathDirty = false; syncPath3D(); }
+    }
+
+    // telemetry -> 2D minimap (every frame)
+    drawMinimap();
+    if (frame % 6 === 0) { updateReadout(); }
+
+    three.controls.update();
+    three.renderer.render(three.scene, three.camera);
+  }
+
+  // Safety net for a live packet: if the renderer is ready but no frame has
+  // ever been scheduled, start the loop. A loop that is already scheduled is
+  // left untouched — a tab the browser has paused must not stack parallel
+  // loops when it becomes visible again. Refuses to start before initThree()
+  // has produced a renderer/controls pair, so an early packet cannot spin.
+  function ensureRenderLoop() {
+    if (rafId || !three.renderer || !three.controls) { return; }
+    rafId = requestAnimationFrame(animate);
+  }
+
+  /* ==================================================================
+     11. BOOT
+     ================================================================== */
+  try {
+    initThree();
+  } catch (err) {
+    document.getElementById('fatal').classList.add('show');
+    console.error('[3d-view] init failed:', err);
+    return;
+  }
+
+  /* ------------------------------------------------------------------
+     Public hooks for the embedding console (index.html).
+
+     `resize` exists because this frame is mounted at a fixed 100% x 500px
+     inside a container the console may keep display:none. window.resize
+     events reach this frame when the viewport changes, but hiding/showing
+     the wrapper is a layout event, not a viewport event — so the console
+     calls in here once after it makes the panel visible. That re-reads the
+     live canvas box and re-fits the drawing buffer, which is what keeps the
+     toggle from ever leaving a blank or squashed WebGL surface behind.
+     Nothing here writes to the parent: the link stays read-only.
+     ------------------------------------------------------------------ */
+  window.__view3d = {
+    resize: function () {
+      try { onResize(); } catch (e) { /* never let a layout nudge throw */ }
+    },
+    refresh: function () {
+      lastParentObstacles = null;      // force a full re-seed from the parent
+      three.obsDirty  = true;
+      three.pathDirty = true;
+      var p = parentState();
+      if (p && num(p.x) !== null && num(p.y) !== null) { state.source = 'parent'; }
+      updateStatus();
+    },
+    state: state,                      // read-only inspection hook (tests)
+    raw: three                         // live renderer/scene handles, for diagnostics
+  };
+
+  setSimulation(false);  // boot with the testing hook off; the parent link or
+                         // robot-telemetry is the real source
+  updateStatus();
+  updateReadout();
+  three.obsDirty = true;
+  three.pathDirty = true;
+  animate();
+};
+</script>
+
+<!-- =====================================================================
+     LIBRARY LOADER: three.js r128 + OrbitControls (global builds), served
+     from the local ./vendor/ folder — no network and no CDN dependency.
+     Both files must sit next to this page:
+       ./vendor/three.min.js
+       ./vendor/OrbitControls.js
+     Relative paths only, so this works identically from a local server and
+     from a GitHub Pages project site. Classic scripts execute in document
+     order, so THREE exists before OrbitControls and both exist before the
+     boot call below.
+     ===================================================================== -->
+<script src="./vendor/three.min.js"></script>
+<script src="./vendor/OrbitControls.js"></script>
+<script>
+(function () {
+  // Boot the viewer now that both globals are guaranteed present.
+  if (!(window.THREE && window.THREE.Scene && window.THREE.OrbitControls)) {
+    document.getElementById('fatal').classList.add('show');
+    console.error('[3d-view] three.js / OrbitControls failed to load from ./vendor/');
+    return;
+  }
+  try {
+    window.__startViewer();
+  } catch (err) {
+    document.getElementById('fatal').classList.add('show');
+    console.error('[3d-view] boot failed:', err);
+  }
+})();
+</script>
+</body>
+</html>
