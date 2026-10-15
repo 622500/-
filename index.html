@@ -797,14 +797,6 @@ html{scroll-behavior:smooth}
   background:var(--bg);
 }
 </style>
-<!-- ===== 新增：roslibjs（rosbridge 浏览器客户端，CDN）===== -->
-<script src="https://cdn.jsdelivr.net/npm/roslib@1.4.1/build/roslib.min.js"></script>
-<!-- 备用 CDN（jsdelivr 不通时换用）：
-<script src="https://unpkg.com/roslib@1.4.1/build/roslib.min.js"></script>
--->
-<!-- 内网/离线环境：把 roslib.min.js 下到与 index.html 同目录，改用：
-<script src="./roslib.min.js"></script>
--->
 </head>
 <body>
 
@@ -1609,112 +1601,6 @@ function canvasRGBA(hex, a) {
     };
   }
 
-  /* ==================================================================
-     1C. ROSBRIDGE 实时路径（阶段三新增）
-     订阅 /path (nav_msgs/Path)，把真实 RRT* 路径画在主视图上。
-     完全独立于本地导航：不改 state.nav / state.path / PID / 任务层，
-     所以 3D 视图、摇杆、PID 面板、示波器行为一律不变。
-     ================================================================== */
-  var ROS_WS_URL = 'ws://localhost:9090';
-  /*  WSL2 网络提示（三选一）：
-      1) Windows 11 22H2+ 且 .wslconfig 里 networkingMode=mirrored：
-         localhost 直接可用，保持上面默认值。
-      2) 默认 NAT 模式 / Windows 10：Windows 访问不到 WSL 的 localhost，
-         改成 WSL2 的 IP —— 在 WSL 里执行 hostname -I 取第一个地址，例如
-             var ROS_WS_URL = 'ws://172.20.145.23:9090';
-         并确认 rosbridge 监听所有网卡（默认 0.0.0.0）：
-             ros2 launch rosbridge_server rosbridge_websocket_launch.xml
-      3) 连不上时先在 Windows PowerShell 验证端口：
-             Test-NetConnection 172.20.145.23 -Port 9090
-  */
-
-  // ROS 地图 -> 本页世界坐标（两套坐标不是同一个世界，必须换算）
-  var ROS_MAP    = { xmin: 0.0, xmax: 50.0, ymin: 0.0, ymax: 30.0 };  // = params.yaml 的 map.xlim/ylim
-  var ROS_FLIP_Y = true;   // ROS 的 +y 朝上；本页世界坐标 +y 朝下（屏幕方向）
-  var ROS_STYLE  = { color: '#39ff88', width: 2.6, dot: 3.2 };        // 绿色实线，与本地青色虚线区分
-  var ROS_DROP_FAKE_PLANNER = true;   // true = 不再生成前端伪绕行点（见 setTarget 改动）
-  var ROS_SCALE  = Math.min((ARENA_HX * 2) / (ROS_MAP.xmax - ROS_MAP.xmin),
-                            (ARENA_HY * 2) / (ROS_MAP.ymax - ROS_MAP.ymin));
-
-  var rosOverlay = { points: [], lastSig: null, msgs: 0, connected: false };
-
-  function rosToWorld(rx, ry) {
-    return {
-      x: (rx - (ROS_MAP.xmin + ROS_MAP.xmax) * 0.5) * ROS_SCALE,
-      y: (ry - (ROS_MAP.ymin + ROS_MAP.ymax) * 0.5) * ROS_SCALE * (ROS_FLIP_Y ? -1 : 1)
-    };
-  }
-
-  // 订阅回调：从 message.poses 里提取 x / y
-  function rosOnPath(msg) {
-    if (!msg || !msg.poses || !msg.poses.length) { return; }
-    rosOverlay.msgs++;
-    var pts = [], i, p;
-    for (i = 0; i < msg.poses.length; i++) {
-      p = msg.poses[i] && msg.poses[i].pose && msg.poses[i].pose.position;
-      if (!p || !isFinite(p.x) || !isFinite(p.y)) { continue; }
-      pts.push(rosToWorld(+p.x, +p.y));
-    }
-    if (pts.length < 2) { return; }
-    // 1 Hz 重发的是同一条路径：签名相同就直接返回，避免每秒重建数组造成抖动
-    var sig = pts.length + '|' + pts[0].x.toFixed(3) + ',' + pts[0].y.toFixed(3) + '|' +
-              pts[pts.length - 1].x.toFixed(3) + ',' + pts[pts.length - 1].y.toFixed(3);
-    if (sig === rosOverlay.lastSig) { return; }
-    rosOverlay.lastSig = sig;
-    rosOverlay.points = pts;
-    console.log('[rosbridge] /path 更新：' + pts.length + ' 个位姿（第 ' +
-                rosOverlay.msgs + ' 帧）');
-  }
-
-  // 画在现有画布上（ctx / w2sX / w2sY / canvasRGBA 都在本 script 作用域内）
-  function drawRosPath() {
-    var pts = rosOverlay.points;
-    if (!pts || pts.length < 2 || !ctx) { return; }
-    var i;
-    ctx.save();
-    ctx.setLineDash([]);
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = canvasRGBA(ROS_STYLE.color, .95);
-    ctx.lineWidth = ROS_STYLE.width;
-    ctx.beginPath();
-    ctx.moveTo(w2sX(pts[0].x), w2sY(pts[0].y));
-    for (i = 1; i < pts.length; i++) { ctx.lineTo(w2sX(pts[i].x), w2sY(pts[i].y)); }
-    ctx.stroke();
-    ctx.fillStyle = canvasRGBA(ROS_STYLE.color, .95);
-    for (i = 0; i < pts.length; i++) {
-      ctx.beginPath();
-      ctx.arc(w2sX(pts[i].x), w2sY(pts[i].y), ROS_STYLE.dot, 0, TAU);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // 连接 + 订阅（ROSLIB 由 <head> 里的 CDN 提供）
-  function rosConnect() {
-    if (typeof ROSLIB === 'undefined') {
-      console.warn('[rosbridge] roslibjs 未加载：跳过实时路径订阅（本地模拟不受影响）');
-      return;
-    }
-    var ros = new ROSLIB.Ros({ url: ROS_WS_URL });
-    ros.on('connection', function () {
-      rosOverlay.connected = true;
-      console.log('[rosbridge] 已连接 ' + ROS_WS_URL);
-    });
-    ros.on('error', function (e) { console.warn('[rosbridge] 连接错误', e); });
-    ros.on('close', function () {
-      rosOverlay.connected = false;
-      console.warn('[rosbridge] 连接关闭，3s 后重连');
-      window.setTimeout(rosConnect, 3000);
-    });
-    var topic = new ROSLIB.Topic({
-      ros: ros, name: '/path', messageType: 'nav_msgs/Path',
-      throttle_rate: 0, queue_length: 1
-    });
-    topic.subscribe(rosOnPath);
-    console.log('[rosbridge] 正在订阅 /path (nav_msgs/Path)');
-  }
-  window.setTimeout(rosConnect, 0);   // 等 init() 把画布准备好再连
-
   /* ------------------------------------------------------------------
      2. SMALL HELPERS
      ------------------------------------------------------------------ */
@@ -2431,10 +2317,8 @@ function canvasRGBA(hex, a) {
     state.pid.integral = 0;
     state.pid.lastError = 0;
     resetOscilloscope();
-    // Batch 2: 本地绕行规划器（伪数据）—— 阶段三起默认不再伪造绕行点
-    state.path.points = ROS_DROP_FAKE_PLANNER
-      ? [{ x: p.x, y: p.y }]                    // 只留目标点，导航/到达判定照常工作
-      : planPath(state.x, state.y, p.x, p.y);   // 旧行为，改 ROS_DROP_FAKE_PLANNER=false 即回滚
+    // Batch 2: build the 1-2 waypoint detour for this target
+    state.path.points = planPath(state.x, state.y, p.x, p.y);
     state.path.index = 0;
     log('log_target', { x: p.x.toFixed(2), y: p.y.toFixed(2) });
     if (state.path.points.length > 1) {
@@ -3541,7 +3425,6 @@ function canvasRGBA(hex, a) {
     if (state.showLidar) { drawLidar(cx, cy); }
     if (state.showCam) { drawCameraFOV(cx, cy); }
     if (state.nav.active) { drawPath(cx, cy); drawTarget(cx, cy, now); }
-    drawRosPath();   // 阶段三：真实 RRT* 路径（rosbridge /path）
     if (state.mission.name === 'CLEARING') { drawClearTarget(); }
     drawRobot(cx, cy, now);
     drawOscilloscope();
@@ -4998,3 +4881,120 @@ function canvasRGBA(hex, a) {
       if (failed) { statusEl.textContent = '无解 No path found'; }
       else if (solved) { statusEl.textContent = '路径 Path: ' + Math.max(0, (path ? path.length : 1) - 1) + ' 步 steps | 平滑 Smooth: ' + (smoothed ? smoothed.length : 0) + ' pts | 已探索 Explored: ' + explored; }
       else { statusEl.textContent = '待探索 Open: ' + (openList ? openList.length : 0) + ' | 已探索 Explored: ' + explored + ' | f = g + h'; }
+    }
+  }
+
+  /* ==================================================================
+     LOOPS
+     ================================================================== */
+  function safeStep() {
+    try { step(); }
+    catch (err) { exploring = false; stopStepping(); if (window.console) { window.console.warn('[algo] step failed', err); } }
+  }
+  function stopStepping() {
+    if (stepTimer) { window.clearInterval(stepTimer); stepTimer = null; }
+  }
+  function stopRaf() {
+    if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
+  }
+  function frame(ts) {
+    try {
+      if (!clock0) { clock0 = ts; }
+      clock = (ts - clock0) / 1000;
+      pulse = 0.5 + 0.5 * Math.sin(clock * 3.4);
+      travel = (clock * 0.5) % 1;
+      draw();
+    } catch (err) {
+      if (window.console) { window.console.warn('[algo] draw failed', err); }
+    }
+    rafId = window.requestAnimationFrame(frame);
+  }
+  function startLoops() {
+    stopStepping();
+    stopRaf();
+    stepTimer = window.setInterval(safeStep, STEP_MS);
+    clock0 = 0;
+    rafId = window.requestAnimationFrame(frame);
+  }
+
+  /* ==================================================================
+     2. INTERRUPT — the main map was clicked while the modal is open
+     ================================================================== */
+  function rerun(reasonKey) {
+    applyState(sharedState());
+    reset();                 // state before paint (see the Batch-3 fix)
+    if (reasonKey) { termLine(reasonKey, 'warn'); }
+    fit();
+    startLoops();
+  }
+
+  function interruptTo(physicsPoint) {
+    var st = sharedState();
+    if (!st) { return; }
+
+    // (a) emergency interrupt: zero the commanded velocity
+    st.vx = 0;
+    if (typeof st.vy === 'number') { st.vy = 0; }
+
+    // (b) new target: normally the host's own map handler already stored it.
+    //     If it did not (listener order / no host handler), set it through the
+    //     same public API the map click uses.
+    var tgt = targetOf(st);
+    if (!tgt && physicsPoint && window.__teleop && typeof window.__teleop.setTarget === 'function') {
+      window.__teleop.setTarget(physicsPoint.x, physicsPoint.y, false);
+      st = sharedState();
+      tgt = targetOf(st);
+    }
+    if (!tgt) { return; }
+
+    // (c) + (d) remap start/goal and re-run the entire search
+    rerun('> [SYS] Interrupt detected. Re-routing from current pose...');
+
+    // (e) mirror it into the main page log as well
+    mainLog('> [SYS] Re-planning from (' + START.x + ',' + START.y + ') to (' + GOAL.x + ',' + GOAL.y + ')');
+  }
+
+  function onMapPointerDown(e) {
+    if (!modal || !modal.classList.contains('open')) { return; }
+    if (e && e.button !== 0 && e.pointerType === 'mouse') { return; }
+    var st = sharedState();
+    if (!st || st.estop) { return; }              // E-STOP swallows map clicks
+    interruptTo(eventToPhysics(e));
+  }
+
+  /* ==================================================================
+     OPEN / CLOSE
+     ================================================================== */
+  function openModal() {
+    if (!modal || !canvas || !ctx) { return; }
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    applyState(sharedState());   // 1. project the shared state
+    reset();                     // 2. fresh search + terminal header
+    fit();                       // 3. size + paint frame 0
+    startLoops();                // 4. auto-play
+    termLine('> tip: click the main map to interrupt & re-route', 'dim');
+    mainLog('> [ALGO] Visualization attached · ' + syncInfo.note);
+  }
+
+  function closeModal() {
+    if (!modal) { return; }
+    var wasOpen = modal.classList.contains('open');
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    stopStepping();
+    stopRaf();
+    exploring = false;
+    clock0 = 0;
+    if (wasOpen) { mainLog('> [ALGO] Visualization detached.'); }
+  }
+
+  /* ==================================================================
+     BOOT
+     ================================================================== */
+  function ready() {
+    modal    = document.getElementById('algoModal');
+    canvas   = document.getElementById('algoCanvas');
+    openBtn  = document.getElementById('algoOpen');
+    closeBtn = document.getElementById('algoClose');
+    statusEl = document.getElementById('algoStatus');
