@@ -797,6 +797,14 @@ html{scroll-behavior:smooth}
   background:var(--bg);
 }
 </style>
+<!-- ===== 新增：roslibjs（rosbridge 浏览器客户端，CDN）===== -->
+<script src="https://cdn.jsdelivr.net/npm/roslib@1.4.1/build/roslib.min.js"></script>
+<!-- 备用 CDN（jsdelivr 不通时换用）：
+<script src="https://unpkg.com/roslib@1.4.1/build/roslib.min.js"></script>
+-->
+<!-- 内网/离线环境：把 roslib.min.js 下到与 index.html 同目录，改用：
+<script src="./roslib.min.js"></script>
+-->
 </head>
 <body>
 
@@ -1601,6 +1609,112 @@ function canvasRGBA(hex, a) {
     };
   }
 
+  /* ==================================================================
+     1C. ROSBRIDGE 实时路径（阶段三新增）
+     订阅 /path (nav_msgs/Path)，把真实 RRT* 路径画在主视图上。
+     完全独立于本地导航：不改 state.nav / state.path / PID / 任务层，
+     所以 3D 视图、摇杆、PID 面板、示波器行为一律不变。
+     ================================================================== */
+  var ROS_WS_URL = 'ws://localhost:9090';
+  /*  WSL2 网络提示（三选一）：
+      1) Windows 11 22H2+ 且 .wslconfig 里 networkingMode=mirrored：
+         localhost 直接可用，保持上面默认值。
+      2) 默认 NAT 模式 / Windows 10：Windows 访问不到 WSL 的 localhost，
+         改成 WSL2 的 IP —— 在 WSL 里执行 hostname -I 取第一个地址，例如
+             var ROS_WS_URL = 'ws://172.20.145.23:9090';
+         并确认 rosbridge 监听所有网卡（默认 0.0.0.0）：
+             ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+      3) 连不上时先在 Windows PowerShell 验证端口：
+             Test-NetConnection 172.20.145.23 -Port 9090
+  */
+
+  // ROS 地图 -> 本页世界坐标（两套坐标不是同一个世界，必须换算）
+  var ROS_MAP    = { xmin: 0.0, xmax: 50.0, ymin: 0.0, ymax: 30.0 };  // = params.yaml 的 map.xlim/ylim
+  var ROS_FLIP_Y = true;   // ROS 的 +y 朝上；本页世界坐标 +y 朝下（屏幕方向）
+  var ROS_STYLE  = { color: '#39ff88', width: 2.6, dot: 3.2 };        // 绿色实线，与本地青色虚线区分
+  var ROS_DROP_FAKE_PLANNER = true;   // true = 不再生成前端伪绕行点（见 setTarget 改动）
+  var ROS_SCALE  = Math.min((ARENA_HX * 2) / (ROS_MAP.xmax - ROS_MAP.xmin),
+                            (ARENA_HY * 2) / (ROS_MAP.ymax - ROS_MAP.ymin));
+
+  var rosOverlay = { points: [], lastSig: null, msgs: 0, connected: false };
+
+  function rosToWorld(rx, ry) {
+    return {
+      x: (rx - (ROS_MAP.xmin + ROS_MAP.xmax) * 0.5) * ROS_SCALE,
+      y: (ry - (ROS_MAP.ymin + ROS_MAP.ymax) * 0.5) * ROS_SCALE * (ROS_FLIP_Y ? -1 : 1)
+    };
+  }
+
+  // 订阅回调：从 message.poses 里提取 x / y
+  function rosOnPath(msg) {
+    if (!msg || !msg.poses || !msg.poses.length) { return; }
+    rosOverlay.msgs++;
+    var pts = [], i, p;
+    for (i = 0; i < msg.poses.length; i++) {
+      p = msg.poses[i] && msg.poses[i].pose && msg.poses[i].pose.position;
+      if (!p || !isFinite(p.x) || !isFinite(p.y)) { continue; }
+      pts.push(rosToWorld(+p.x, +p.y));
+    }
+    if (pts.length < 2) { return; }
+    // 1 Hz 重发的是同一条路径：签名相同就直接返回，避免每秒重建数组造成抖动
+    var sig = pts.length + '|' + pts[0].x.toFixed(3) + ',' + pts[0].y.toFixed(3) + '|' +
+              pts[pts.length - 1].x.toFixed(3) + ',' + pts[pts.length - 1].y.toFixed(3);
+    if (sig === rosOverlay.lastSig) { return; }
+    rosOverlay.lastSig = sig;
+    rosOverlay.points = pts;
+    console.log('[rosbridge] /path 更新：' + pts.length + ' 个位姿（第 ' +
+                rosOverlay.msgs + ' 帧）');
+  }
+
+  // 画在现有画布上（ctx / w2sX / w2sY / canvasRGBA 都在本 script 作用域内）
+  function drawRosPath() {
+    var pts = rosOverlay.points;
+    if (!pts || pts.length < 2 || !ctx) { return; }
+    var i;
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = canvasRGBA(ROS_STYLE.color, .95);
+    ctx.lineWidth = ROS_STYLE.width;
+    ctx.beginPath();
+    ctx.moveTo(w2sX(pts[0].x), w2sY(pts[0].y));
+    for (i = 1; i < pts.length; i++) { ctx.lineTo(w2sX(pts[i].x), w2sY(pts[i].y)); }
+    ctx.stroke();
+    ctx.fillStyle = canvasRGBA(ROS_STYLE.color, .95);
+    for (i = 0; i < pts.length; i++) {
+      ctx.beginPath();
+      ctx.arc(w2sX(pts[i].x), w2sY(pts[i].y), ROS_STYLE.dot, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // 连接 + 订阅（ROSLIB 由 <head> 里的 CDN 提供）
+  function rosConnect() {
+    if (typeof ROSLIB === 'undefined') {
+      console.warn('[rosbridge] roslibjs 未加载：跳过实时路径订阅（本地模拟不受影响）');
+      return;
+    }
+    var ros = new ROSLIB.Ros({ url: ROS_WS_URL });
+    ros.on('connection', function () {
+      rosOverlay.connected = true;
+      console.log('[rosbridge] 已连接 ' + ROS_WS_URL);
+    });
+    ros.on('error', function (e) { console.warn('[rosbridge] 连接错误', e); });
+    ros.on('close', function () {
+      rosOverlay.connected = false;
+      console.warn('[rosbridge] 连接关闭，3s 后重连');
+      window.setTimeout(rosConnect, 3000);
+    });
+    var topic = new ROSLIB.Topic({
+      ros: ros, name: '/path', messageType: 'nav_msgs/Path',
+      throttle_rate: 0, queue_length: 1
+    });
+    topic.subscribe(rosOnPath);
+    console.log('[rosbridge] 正在订阅 /path (nav_msgs/Path)');
+  }
+  window.setTimeout(rosConnect, 0);   // 等 init() 把画布准备好再连
+
   /* ------------------------------------------------------------------
      2. SMALL HELPERS
      ------------------------------------------------------------------ */
@@ -2317,8 +2431,10 @@ function canvasRGBA(hex, a) {
     state.pid.integral = 0;
     state.pid.lastError = 0;
     resetOscilloscope();
-    // Batch 2: build the 1-2 waypoint detour for this target
-    state.path.points = planPath(state.x, state.y, p.x, p.y);
+    // Batch 2: 本地绕行规划器（伪数据）—— 阶段三起默认不再伪造绕行点
+    state.path.points = ROS_DROP_FAKE_PLANNER
+      ? [{ x: p.x, y: p.y }]                    // 只留目标点，导航/到达判定照常工作
+      : planPath(state.x, state.y, p.x, p.y);   // 旧行为，改 ROS_DROP_FAKE_PLANNER=false 即回滚
     state.path.index = 0;
     log('log_target', { x: p.x.toFixed(2), y: p.y.toFixed(2) });
     if (state.path.points.length > 1) {
@@ -3425,6 +3541,7 @@ function canvasRGBA(hex, a) {
     if (state.showLidar) { drawLidar(cx, cy); }
     if (state.showCam) { drawCameraFOV(cx, cy); }
     if (state.nav.active) { drawPath(cx, cy); drawTarget(cx, cy, now); }
+    drawRosPath();   // 阶段三：真实 RRT* 路径（rosbridge /path）
     if (state.mission.name === 'CLEARING') { drawClearTarget(); }
     drawRobot(cx, cy, now);
     drawOscilloscope();
@@ -4881,586 +4998,3 @@ function canvasRGBA(hex, a) {
       if (failed) { statusEl.textContent = '无解 No path found'; }
       else if (solved) { statusEl.textContent = '路径 Path: ' + Math.max(0, (path ? path.length : 1) - 1) + ' 步 steps | 平滑 Smooth: ' + (smoothed ? smoothed.length : 0) + ' pts | 已探索 Explored: ' + explored; }
       else { statusEl.textContent = '待探索 Open: ' + (openList ? openList.length : 0) + ' | 已探索 Explored: ' + explored + ' | f = g + h'; }
-    }
-  }
-
-  /* ==================================================================
-     LOOPS
-     ================================================================== */
-  function safeStep() {
-    try { step(); }
-    catch (err) { exploring = false; stopStepping(); if (window.console) { window.console.warn('[algo] step failed', err); } }
-  }
-  function stopStepping() {
-    if (stepTimer) { window.clearInterval(stepTimer); stepTimer = null; }
-  }
-  function stopRaf() {
-    if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
-  }
-  function frame(ts) {
-    try {
-      if (!clock0) { clock0 = ts; }
-      clock = (ts - clock0) / 1000;
-      pulse = 0.5 + 0.5 * Math.sin(clock * 3.4);
-      travel = (clock * 0.5) % 1;
-      draw();
-    } catch (err) {
-      if (window.console) { window.console.warn('[algo] draw failed', err); }
-    }
-    rafId = window.requestAnimationFrame(frame);
-  }
-  function startLoops() {
-    stopStepping();
-    stopRaf();
-    stepTimer = window.setInterval(safeStep, STEP_MS);
-    clock0 = 0;
-    rafId = window.requestAnimationFrame(frame);
-  }
-
-  /* ==================================================================
-     2. INTERRUPT — the main map was clicked while the modal is open
-     ================================================================== */
-  function rerun(reasonKey) {
-    applyState(sharedState());
-    reset();                 // state before paint (see the Batch-3 fix)
-    if (reasonKey) { termLine(reasonKey, 'warn'); }
-    fit();
-    startLoops();
-  }
-
-  function interruptTo(physicsPoint) {
-    var st = sharedState();
-    if (!st) { return; }
-
-    // (a) emergency interrupt: zero the commanded velocity
-    st.vx = 0;
-    if (typeof st.vy === 'number') { st.vy = 0; }
-
-    // (b) new target: normally the host's own map handler already stored it.
-    //     If it did not (listener order / no host handler), set it through the
-    //     same public API the map click uses.
-    var tgt = targetOf(st);
-    if (!tgt && physicsPoint && window.__teleop && typeof window.__teleop.setTarget === 'function') {
-      window.__teleop.setTarget(physicsPoint.x, physicsPoint.y, false);
-      st = sharedState();
-      tgt = targetOf(st);
-    }
-    if (!tgt) { return; }
-
-    // (c) + (d) remap start/goal and re-run the entire search
-    rerun('> [SYS] Interrupt detected. Re-routing from current pose...');
-
-    // (e) mirror it into the main page log as well
-    mainLog('> [SYS] Re-planning from (' + START.x + ',' + START.y + ') to (' + GOAL.x + ',' + GOAL.y + ')');
-  }
-
-  function onMapPointerDown(e) {
-    if (!modal || !modal.classList.contains('open')) { return; }
-    if (e && e.button !== 0 && e.pointerType === 'mouse') { return; }
-    var st = sharedState();
-    if (!st || st.estop) { return; }              // E-STOP swallows map clicks
-    interruptTo(eventToPhysics(e));
-  }
-
-  /* ==================================================================
-     OPEN / CLOSE
-     ================================================================== */
-  function openModal() {
-    if (!modal || !canvas || !ctx) { return; }
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
-    applyState(sharedState());   // 1. project the shared state
-    reset();                     // 2. fresh search + terminal header
-    fit();                       // 3. size + paint frame 0
-    startLoops();                // 4. auto-play
-    termLine('> tip: click the main map to interrupt & re-route', 'dim');
-    mainLog('> [ALGO] Visualization attached · ' + syncInfo.note);
-  }
-
-  function closeModal() {
-    if (!modal) { return; }
-    var wasOpen = modal.classList.contains('open');
-    modal.classList.remove('open');
-    modal.setAttribute('aria-hidden', 'true');
-    stopStepping();
-    stopRaf();
-    exploring = false;
-    clock0 = 0;
-    if (wasOpen) { mainLog('> [ALGO] Visualization detached.'); }
-  }
-
-  /* ==================================================================
-     BOOT
-     ================================================================== */
-  function ready() {
-    modal    = document.getElementById('algoModal');
-    canvas   = document.getElementById('algoCanvas');
-    openBtn  = document.getElementById('algoOpen');
-    closeBtn = document.getElementById('algoClose');
-    statusEl = document.getElementById('algoStatus');
-    termEl   = document.getElementById('algoTerm');
-
-    // benchmark panel refs (all optional: the modal works without them)
-    compareEl   = document.getElementById('algoCompare');
-    startEl     = document.getElementById('algoStart');
-    exportEl    = document.getElementById('algoExport');
-    masNodesEl  = document.getElementById('algoMAstNodes');
-    masLenEl    = document.getElementById('algoMAstLen');
-    masMsEl     = document.getElementById('algoMAstMs');
-    masRevEl    = document.getElementById('algoMAstRev');
-    mdijNodesEl = document.getElementById('algoMDijNodes');
-    mdijLenEl   = document.getElementById('algoMDijLen');
-    mdijMsEl    = document.getElementById('algoMDijMs');
-    mdijRevEl   = document.getElementById('algoMDijRev');
-    mEffEl      = document.getElementById('algoMEff');
-    thDijEl     = document.getElementById('algoThDij');
-
-    if (!modal || !canvas || !openBtn || !closeBtn) { return; }
-    ctx = canvas.getContext('2d');
-    if (!ctx) { return; }
-
-    openBtn.addEventListener('click', openModal);
-    closeBtn.addEventListener('click', closeModal);
-
-    if (compareEl) {
-      compareEl.checked = bench.dijkstra;
-      compareEl.addEventListener('change', function () {
-        bench.dijkstra = !!this.checked;
-        termLine(bench.dijkstra
-          ? '> [BENCH] Compare Dijkstra armed — press Start to run the pair.'
-          : '> [BENCH] Dijkstra comparison off.', 'dim');
-      });
-    }
-    if (startEl) {
-      startEl.addEventListener('click', function () {
-        rerun('> [BENCH] Start — re-running on the current grid...');
-      });
-    }
-    if (exportEl) { exportEl.addEventListener('click', exportCsv); }
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && modal.classList.contains('open')) { closeModal(); }
-    });
-    window.addEventListener('resize', function () {
-      if (modal.classList.contains('open')) { fit(); }
-    });
-
-    // listen on the main map: the host's own handler runs first (it was
-    // registered earlier), so the shared target is already up to date here
-    var map = document.getElementById('map');
-    if (map && !mapBound) {
-      mapBound = true;
-      map.addEventListener('pointerdown', onMapPointerDown);
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ready);
-  } else {
-    ready();
-  }
-})();
-</script>
-<script>
-/* =====================================================================
-   ADVANCED CONTROL & PERCEPTION — isolated research module
-   ---------------------------------------------------------------------
-   SAFETY CONTRACT
-     * Never writes state.x / state.y / state.yaw (main physics stays
-       untouched). It only READS the live pose through window.__teleop.
-     * Everything it owns lives in the private `S` object below.
-     * The PID gains it edits are the dedicated control namespace
-       `state.pid` — the same isolated object navCommand() consumes, so
-       the control layer has exactly one source of truth.
-     * Renders into its OWN canvases plus a pointer-events:none overlay,
-       so the main renderer is never disturbed.
-
-   LAYERS
-     control    : discrete PID (already inside navCommand) + tuning panel
-     perception : gaussian measurement noise + complementary filter
-     viz        : #pidCanvas, #filterCanvas, #perceptionOverlay
-   ===================================================================== */
-(function () {
-  'use strict';
-
-  var ARENA_HX = 9.0, ARENA_HY = 5.75, PAD = 0.7;
-  var TEL_N = 100;                 // rolling window: last 100 samples
-  var TEL_DT = 0.1;                // 10 Hz sampling
-
-  /* ---- isolated perception state (no collision with the state machine) ---- */
-  var S = {
-    sigma: 0.15,                   // measurement noise sigma (m), slider 0..1
-    alpha: 0.80,                   // complementary filter weight, slider 0.5..1
-    estX: 0, measX: 0, ready: false,
-    lastT: 0, timer: 0,
-    vel: [], eMeas: [], eEst: []   // rolling windows
-  };
-
-  var PRESETS = [
-    { label: 'preset: default (Kp1.5 Ki0.1 Kd0.2)', kp: 1.50, ki: 0.10, kd: 0.20 },
-    { label: 'preset: extreme overshoot',           kp: 2.80, ki: 0.60, kd: 0.00 },
-    { label: 'preset: overdamped',                  kp: 0.80, ki: 0.02, kd: 0.90 }
-  ];
-  var presetIdx = 0;
-
-  var el = {};
-  var ovCtx = null, pidCtx = null, filtCtx = null;
-
-  /* ---- host bridge (read-only) ---- */
-  function hostState() {
-    var T = window.__teleop;
-    return (T && T.state) ? T.state : null;
-  }
-
-  function gauss() {
-    var u = 0, v = 0;
-    while (u === 0) { u = Math.random(); }
-    while (v === 0) { v = Math.random(); }
-    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-  }
-
-  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
-
-  /* ==================================================================
-     SAMPLE — noise model + complementary filter
-       measuredX = truthX + gaussian() * noiseLevel
-       estX      = alpha * (estX + v*dt) + (1 - alpha) * measuredX
-     ================================================================== */
-  function sample() {
-    var st = hostState();
-    if (!st) { return; }
-
-    var now = performance.now();
-    var dt = S.lastT ? Math.min((now - S.lastT) / 1000, 0.1) : 0.016;
-    S.lastT = now;
-
-    var truthX = (typeof st.x === 'number') ? st.x : 0;
-    var v      = (typeof st.vx === 'number') ? st.vx : 0;
-
-    if (!S.ready) { S.estX = truthX; S.measX = truthX; S.ready = true; }
-
-    // --- measurement (noisy sensor) ---
-    S.measX = truthX + gauss() * S.sigma;
-
-    // --- complementary filter: model prediction corrected by the measurement ---
-    var predicted = S.estX + v * dt;
-    S.estX = S.alpha * predicted + (1 - S.alpha) * S.measX;
-
-    // --- 10 Hz rolling windows ---
-    S.timer += dt;
-    if (S.timer < TEL_DT) { return; }
-    S.timer = 0;
-    S.vel.push(v);
-    S.eMeas.push(Math.abs(S.measX - truthX));
-    S.eEst.push(Math.abs(S.estX - truthX));
-    while (S.vel.length > TEL_N) { S.vel.shift(); S.eMeas.shift(); S.eEst.shift(); }
-  }
-
-  /* ==================================================================
-     PLOT HELPERS
-     ================================================================== */
-  function prep(cv, ctx) {
-    var r = cv.getBoundingClientRect();
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var w = Math.max(60, Math.round(r.width));
-    var h = Math.max(30, Math.round(r.height));
-    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
-      cv.width = Math.round(w * dpr);
-      cv.height = Math.round(h * dpr);
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { w: w, h: h };
-  }
-
-  function grid(ctx, w, h, zeroLine) {
-    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .9);
-    ctx.lineWidth = 1;
-    ctx.strokeRect(3.5, 3.5, w - 7, h - 7);
-    ctx.beginPath();
-    for (var i = 1; i < 4; i++) {
-      var gy = Math.round(4 + (h - 8) * i / 4) + 0.5;
-      ctx.moveTo(4, gy); ctx.lineTo(w - 4, gy);
-    }
-    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .5);
-    ctx.stroke();
-    if (zeroLine) {
-      ctx.beginPath();
-      ctx.moveTo(4, zeroLine + 0.5); ctx.lineTo(w - 4, zeroLine + 0.5);
-      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.text, .45);
-      ctx.stroke();
-    }
-  }
-
-  function caption(ctx, h, w, left, right, color) {
-    ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = color;
-    ctx.fillText(left, 7, h - 5);
-    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.text, .8);
-    ctx.fillText(right, Math.max(7, w - 74), h - 5);
-  }
-
-  /* ==================================================================
-     CONTROL LAYER PLOT — signed linear velocity, 100 samples
-     ================================================================== */
-  function drawPid() {
-    if (!pidCtx || !el.pidCanvas) { return; }
-    var d = prep(el.pidCanvas, pidCtx), w = d.w, h = d.h, i;
-    var arr = S.vel;
-
-    pidCtx.clearRect(0, 0, w, h);
-
-    var scale = 0.5;
-    for (i = 0; i < arr.length; i++) { scale = Math.max(scale, Math.abs(arr[i])); }
-    var mid = (h - 14) / 2 + 4;
-    var half = (h - 22) / 2;
-
-    grid(pidCtx, w, h, mid);
-
-    var n = arr.length;
-    if (n >= 2) {
-      var stepX = (w - 8) / (TEL_N - 1);
-      pidCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .95);
-      pidCtx.lineWidth = 1.5;
-      pidCtx.beginPath();
-      for (i = 0; i < n; i++) {
-        var px = w - 4 - (n - 1 - i) * stepX;
-        var py = mid - clamp(arr[i] / scale, -1, 1) * half;
-        if (i === 0) { pidCtx.moveTo(px, py); } else { pidCtx.lineTo(px, py); }
-      }
-      pidCtx.stroke();
-    }
-
-    var cur = n ? arr[n - 1] : 0;
-    caption(pidCtx, h, w, 'v ' + cur.toFixed(2) + ' m/s', 'max ' + scale.toFixed(2),
-            canvasRGBA(CANVAS_COLORS.accent, .95));
-  }
-
-  /* ==================================================================
-     PERCEPTION LAYER PLOT — |measured error| vs |filtered error|
-     ================================================================== */
-  function drawFilter() {
-    if (!filtCtx || !el.filterCanvas) { return; }
-    var d = prep(el.filterCanvas, filtCtx), w = d.w, h = d.h, i;
-    var m = S.eMeas, f = S.eEst;
-
-    filtCtx.clearRect(0, 0, w, h);
-
-    var scale = 0.05;
-    for (i = 0; i < m.length; i++) {
-      if (m[i] > scale) { scale = m[i]; }
-      if (f[i] > scale) { scale = f[i]; }
-    }
-    grid(filtCtx, w, h, 0);
-
-    function trace(arr, color) {
-      var n = arr.length;
-      if (n < 2) { return; }
-      var stepX = (w - 8) / (TEL_N - 1);
-      filtCtx.strokeStyle = color;
-      filtCtx.lineWidth = 1.5;
-      filtCtx.beginPath();
-      for (var k = 0; k < n; k++) {
-        var px = w - 4 - (n - 1 - k) * stepX;
-        var py = (h - 14) - (Math.min(arr[k], scale) / scale) * (h - 24);
-        if (k === 0) { filtCtx.moveTo(px, py); } else { filtCtx.lineTo(px, py); }
-      }
-      filtCtx.stroke();
-    }
-    trace(m, canvasRGBA(CANVAS_COLORS.warn, .95));   // measured (yellow)
-    trace(f, canvasRGBA(CANVAS_COLORS.success, .95));   // filtered (green)
-
-    var curM = m.length ? m[m.length - 1] : 0;
-    var curF = f.length ? f[f.length - 1] : 0;
-    caption(filtCtx, h, w, 'meas ' + curM.toFixed(2) + ' · filt ' + curF.toFixed(2) + ' m',
-            'max ' + scale.toFixed(2), canvasRGBA(CANVAS_COLORS.warn, .95));
-
-    // running means are the actual research result: filtering must lower them
-    if (el.filterReadout && m.length > 2) {
-      var sm = 0, sf = 0;
-      for (i = 0; i < m.length; i++) { sm += m[i]; sf += f[i]; }
-      sm /= m.length; sf /= f.length;
-      var txt = '|err| meas ' + sm.toFixed(3) + ' m · filt ' + sf.toFixed(3) + ' m';
-      if (txt !== S.lastReadout) { S.lastReadout = txt; el.filterReadout.textContent = txt; }
-    }
-  }
-
-  /* ==================================================================
-     MAP OVERLAY — Red truth · Yellow measured · Green filtered
-     The transform mirrors the host view exactly (same padding + fit),
-     so the markers land on the robot without touching the main renderer.
-     ================================================================== */
-  function drawOverlay() {
-    if (!ovCtx || !el.overlay) { return; }
-    var st = hostState();
-    var d = prep(el.overlay, ovCtx), w = d.w, h = d.h;
-    ovCtx.clearRect(0, 0, w, h);
-    if (!st) { return; }
-
-    var s = Math.max(4, Math.min(w / ((ARENA_HX + PAD) * 2), h / ((ARENA_HY + PAD) * 2)));
-    var cx = w / 2, cy = h / 2;
-    var truthX = (typeof st.x === 'number') ? st.x : 0;
-    var truthY = (typeof st.y === 'number') ? st.y : 0;
-
-    var tx = cx + truthX * s, ty = cy + truthY * s;
-    var mx = cx + S.measX * s,  my = cy + truthY * s;
-    var ex = cx + S.estX * s,   ey = cy + truthY * s;
-
-    // measurement residual (truth -> measured)
-    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .55);
-    ovCtx.lineWidth = 1;
-    ovCtx.setLineDash([3, 4]);
-    ovCtx.beginPath();
-    ovCtx.moveTo(tx, ty); ovCtx.lineTo(mx, my);
-    ovCtx.stroke();
-    ovCtx.setLineDash([]);
-
-    // yellow: noisy measurement
-    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .95);
-    ovCtx.lineWidth = 1.6;
-    ovCtx.beginPath(); ovCtx.arc(mx, my, 6.5, 0, Math.PI * 2); ovCtx.stroke();
-
-    // green: complementary filter estimate
-    ovCtx.fillStyle = canvasRGBA(CANVAS_COLORS.success, .95);
-    ovCtx.beginPath(); ovCtx.arc(ex, ey, 3.4, 0, Math.PI * 2); ovCtx.fill();
-
-    // red: ground truth (always the true pose)
-    ovCtx.fillStyle = canvasRGBA(CANVAS_COLORS.danger, .95);
-    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.bg, .9);
-    ovCtx.lineWidth = 1.2;
-    ovCtx.beginPath(); ovCtx.arc(tx, ty, 4.6, 0, Math.PI * 2); ovCtx.fill(); ovCtx.stroke();
-  }
-
-  /* ==================================================================
-     UI — sliders, preset, and two-way mirror of the drawer controls
-     ================================================================== */
-  function pushPidToCanvasUi() {
-    var st = hostState();
-    if (!st || !st.pid) { return; }
-    var p = st.pid;
-
-    el.pidKp.value = String(p.kp);
-    el.pidKi.value = String(p.ki);
-    el.pidKd.value = String(p.kd);
-    el.pidVKp.textContent = p.kp.toFixed(2);
-    el.pidVKi.textContent = p.ki.toFixed(2);
-    el.pidVKd.textContent = p.kd.toFixed(2);
-
-    // keep the Parameters-drawer trio consistent (both edit the same namespace)
-    var dKp = document.getElementById('rKp'), vKp = document.getElementById('vKp');
-    var dKi = document.getElementById('rKi'), vKi = document.getElementById('vKi');
-    var dKd = document.getElementById('rKd'), vKd = document.getElementById('vKd');
-    if (dKp) { dKp.value = String(p.kp); }
-    if (dKi) { dKi.value = String(p.ki); }
-    if (dKd) { dKd.value = String(p.kd); }
-    if (vKp) { vKp.textContent = p.kp.toFixed(2); }
-    if (vKi) { vKi.textContent = p.ki.toFixed(2); }
-    if (vKd) { vKd.textContent = p.kd.toFixed(2); }
-  }
-
-  function applyPreset(idx) {
-    var st = hostState();
-    if (!st || !st.pid) { return; }
-    var pr = PRESETS[idx % PRESETS.length];
-    presetIdx = idx % PRESETS.length;
-    st.pid.kp = pr.kp; st.pid.ki = pr.ki; st.pid.kd = pr.kd;
-    st.pid.integral = 0; st.pid.lastError = 0;      // no stale wind-up after a tune
-    if (el.pidPreset) { el.pidPreset.textContent = pr.label; }
-    pushPidToCanvasUi();
-  }
-
-  function wire() {
-    el.overlay      = document.getElementById('perceptionOverlay');
-    el.pidCanvas    = document.getElementById('pidCanvas');
-    el.filterCanvas = document.getElementById('filterCanvas');
-    el.pidKp = document.getElementById('pidKp');
-    el.pidKi = document.getElementById('pidKi');
-    el.pidKd = document.getElementById('pidKd');
-    el.pidVKp = document.getElementById('pidVKp');
-    el.pidVKi = document.getElementById('pidVKi');
-    el.pidVKd = document.getElementById('pidVKd');
-    el.pidPreset = document.getElementById('pidPreset');
-    el.pidPresetBtn = document.getElementById('pidPresetBtn');
-    el.filtSigma = document.getElementById('filtSigma');
-    el.filtAlpha = document.getElementById('filtAlpha');
-    el.filtVSigma = document.getElementById('filtVSigma');
-    el.filtVAlpha = document.getElementById('filtVAlpha');
-    el.filterReadout = document.getElementById('filterReadout');
-
-    if (el.overlay) { ovCtx = el.overlay.getContext('2d'); }
-    if (el.pidCanvas) { pidCtx = el.pidCanvas.getContext('2d'); }
-    if (el.filterCanvas) { filtCtx = el.filterCanvas.getContext('2d'); }
-
-    function gainHandler(which) {
-      return function () {
-        var st = hostState();
-        if (!st || !st.pid) { return; }
-        if (which === 'kp') { st.pid.kp = clamp(parseFloat(this.value), 0, 3); st.pid.integral = 0; }
-        if (which === 'ki') { st.pid.ki = clamp(parseFloat(this.value), 0, 1); st.pid.integral = 0; }
-        if (which === 'kd') { st.pid.kd = clamp(parseFloat(this.value), 0, 1); st.pid.lastError = 0; }
-        if (el.pidPreset) { el.pidPreset.textContent = 'preset: custom'; }
-        pushPidToCanvasUi();
-      };
-    }
-    if (el.pidKp) { el.pidKp.addEventListener('input', gainHandler('kp')); }
-    if (el.pidKi) { el.pidKi.addEventListener('input', gainHandler('ki')); }
-    if (el.pidKd) { el.pidKd.addEventListener('input', gainHandler('kd')); }
-
-    if (el.pidPresetBtn) {
-      el.pidPresetBtn.addEventListener('click', function () {
-        applyPreset(presetIdx + 1);
-      });
-    }
-
-    if (el.filtSigma) {
-      el.filtSigma.addEventListener('input', function () {
-        S.sigma = clamp(parseFloat(this.value), 0, 1);
-        el.filtVSigma.textContent = S.sigma.toFixed(2) + ' m';
-      });
-    }
-    if (el.filtAlpha) {
-      el.filtAlpha.addEventListener('input', function () {
-        S.alpha = clamp(parseFloat(this.value), 0.5, 1);
-        el.filtVAlpha.textContent = S.alpha.toFixed(2);
-      });
-    }
-
-    el.filtVSigma.textContent = S.sigma.toFixed(2) + ' m';
-    el.filtVAlpha.textContent = S.alpha.toFixed(2);
-    applyPreset(0);          // seed the canonical PID namespace with the defaults
-  }
-
-  /* ==================================================================
-     LOOP — one rAF callback, fully guarded: a failure here can never
-     break the host page's own animation loop.
-     ================================================================== */
-  function frame() {
-    try {
-      sample();
-      drawPid();
-      drawFilter();
-      drawOverlay();
-    } catch (err) {
-      if (window.console) { window.console.warn('[research] frame failed', err); }
-    }
-    window.requestAnimationFrame(frame);
-  }
-
-  function boot() {
-    try {
-      wire();
-      window.requestAnimationFrame(frame);
-    } catch (err) {
-      if (window.console) { window.console.warn('[research] boot failed', err); }
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
-})();
-</script>
-
-</body>
-</html>
