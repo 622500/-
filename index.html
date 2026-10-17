@@ -797,6 +797,14 @@ html{scroll-behavior:smooth}
   background:var(--bg);
 }
 </style>
+<!-- ===== 新增：roslibjs（rosbridge 浏览器客户端，CDN）===== -->
+<script src="./roslib.min.js"></script>
+<!-- 备用 CDN（jsdelivr 不通时换用）：
+<script src="https://unpkg.com/roslib@1.4.1/build/roslib.min.js"></script>
+-->
+<!-- 内网/离线环境：把 roslib.min.js 下到与 index.html 同目录，改用：
+<script src="./roslib.min.js"></script>
+-->
 </head>
 <body>
 
@@ -1453,7 +1461,7 @@ function canvasRGBA(hex, a) {
      1. CONSTANTS & STATE
      ------------------------------------------------------------------ */
   var ARENA_HX   = 9.0;      // arena half width  (metres)
-  var ARENA_HY   = 5.75;     // arena half height (metres)
+  var ARENA_HY   = 5.4;      // 物理强对齐：= ARENA_HX * 30/50，两轴比例同为 0.36
   var BASE_SPEED = 2.2;      // m/s at maxSpeed = 1.0
   var ROBOT_R    = 0.36;     // chassis radius (drawing + wall clamp)
   var COLLIDE_R  = 0.5;      // collision warning distance (spec)
@@ -1600,6 +1608,455 @@ function canvasRGBA(hex, a) {
       setTarget(tx, ty);
     };
   }
+
+  /* ==================================================================
+     1C. ROSBRIDGE 实时路径（阶段三新增）
+     订阅 /path (nav_msgs/Path)，把真实 RRT* 路径画在主视图上。
+     完全独立于本地导航：不改 state.nav / state.path / PID / 任务层，
+     所以 3D 视图、摇杆、PID 面板、示波器行为一律不变。
+     ================================================================== */
+  var ROS_WS_URL = 'ws://172.26.142.2:9090';
+  /*  WSL2 网络提示（三选一）：
+      1) Windows 11 22H2+ 且 .wslconfig 里 networkingMode=mirrored：
+         localhost 直接可用，保持上面默认值。
+      2) 默认 NAT 模式 / Windows 10：Windows 访问不到 WSL 的 localhost，
+         改成 WSL2 的 IP —— 在 WSL 里执行 hostname -I 取第一个地址，例如
+             var ROS_WS_URL = 'ws://172.20.145.23:9090';
+         并确认 rosbridge 监听所有网卡（默认 0.0.0.0）：
+             ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+      3) 连不上时先在 Windows PowerShell 验证端口：
+             Test-NetConnection 172.20.145.23 -Port 9090
+  */
+
+  // ROS 地图 -> 本页世界坐标（两套坐标不是同一个世界，必须换算）
+  var ROS_MAP    = { xmin: 0.0, xmax: 50.0, ymin: 0.0, ymax: 30.0 };  // = params.yaml 的 map.xlim/ylim
+  var ROS_FLIP_Y = true;   // ROS 的 +y 朝上；本页世界坐标 +y 朝下（屏幕方向）
+  var ROS_STYLE  = { color: '#39ff88', width: 2.6, dot: 3.2 };        // 绿色实线，与本地青色虚线区分
+  var ROS_DROP_FAKE_PLANNER = true;   // true = 不再生成前端伪绕行点（见 setTarget 改动）
+  var ROS_SCALE  = Math.min((ARENA_HX * 2) / (ROS_MAP.xmax - ROS_MAP.xmin),
+                            (ARENA_HY * 2) / (ROS_MAP.ymax - ROS_MAP.ymin));
+
+  var rosOverlay = { points: [], lastSig: null, msgs: 0, connected: false };
+
+  // 每轴独立归一化：前端整块场地 <-> ROS 整幅地图（一一对应，不裁剪、不溢出）
+  function rosToWorld(rx, ry) {
+    var tx = (rx - ROS_MAP.xmin) / (ROS_MAP.xmax - ROS_MAP.xmin);   // 0..1
+    var ty = (ry - ROS_MAP.ymin) / (ROS_MAP.ymax - ROS_MAP.ymin);   // 0..1
+    return {
+      x: tx * (ARENA_HX * 2) - ARENA_HX,
+      y: ARENA_HY - ty * (ARENA_HY * 2)      // ROS +y 朝上 -> 屏幕 +y 朝下
+    };
+  }
+
+  // 订阅回调：从 message.poses 里提取 x / y
+  function rosOnPath(msg) {
+    if (!msg || !msg.poses || !msg.poses.length) { return; }
+    rosOverlay.msgs++;
+    var pts = [], i, p;
+    for (i = 0; i < msg.poses.length; i++) {
+      p = msg.poses[i] && msg.poses[i].pose && msg.poses[i].pose.position;
+      if (!p || !isFinite(p.x) || !isFinite(p.y)) { continue; }
+      pts.push(rosToWorld(+p.x, +p.y));
+    }
+    if (pts.length < 2) { return; }
+    // 1 Hz 重发的是同一条路径：签名相同就直接返回，避免每秒重建数组造成抖动
+    var sig = pts.length + '|' + pts[0].x.toFixed(3) + ',' + pts[0].y.toFixed(3) + '|' +
+              pts[pts.length - 1].x.toFixed(3) + ',' + pts[pts.length - 1].y.toFixed(3);
+    if (sig === rosOverlay.lastSig) { return; }
+    rosOverlay.lastSig = sig;
+    rosOverlay.points = pts;
+
+    // ---- 阶段四：把真实路径交给跟踪器（currentPathPoints 是全局数组）----
+    currentPathPoints = pts.slice();
+    window.currentPathPoints = currentPathPoints;   // 便于在 F12 控制台检查
+    rosFollowStart();
+    rosGoal.pending = null;      // 阶段七：收到新路径 -> 目标已生效
+    rosGoal.fail = null;
+    console.log('[rosbridge] /path 更新：' + pts.length + ' 个位姿（第 ' +
+                rosOverlay.msgs + ' 帧）');
+  }
+
+  // 画在现有画布上（ctx / w2sX / w2sY / canvasRGBA 都在本 script 作用域内）
+  function drawRosPath() {
+    var pts = rosOverlay.points;
+    if (!pts || pts.length < 2 || !ctx) { return; }
+    var i;
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = canvasRGBA(ROS_STYLE.color, .95);
+    ctx.lineWidth = ROS_STYLE.width;
+    ctx.beginPath();
+    ctx.moveTo(w2sX(pts[0].x), w2sY(pts[0].y));
+    for (i = 1; i < pts.length; i++) { ctx.lineTo(w2sX(pts[i].x), w2sY(pts[i].y)); }
+    ctx.stroke();
+    ctx.fillStyle = canvasRGBA(ROS_STYLE.color, .95);
+    for (i = 0; i < pts.length; i++) {
+      ctx.beginPath();
+      ctx.arc(w2sX(pts[i].x), w2sY(pts[i].y), ROS_STYLE.dot, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /* ==================================================================
+     1D. 路径跟踪 Path Tracking（阶段四新增）
+     由主循环 frame() 每帧驱动：update(dt) 之后、render() 之前调用。
+       * 位置：沿 currentPathPoints 折线匀速前进（kinematic）
+       * 朝向：跟随当前段切线，角度插值 + 角速度上限，平滑不跳变
+       * 速度：回填 state.vx / state.vyaw，HUD 车速、示波器、3D 遥测一致
+       * 让位：急停最高优先；摇杆/键盘一介入即停止跟踪
+     ================================================================== */
+  var currentPathPoints = [];          // 全局路径点 [{x, y}]（前端世界坐标）
+  var ROS_FOLLOW_SPEED = 1.2;          // m/s，跟踪速度
+  var ROS_FOLLOW_EPS   = 0.06;         // m，判定到达当前点
+  var ROS_FOLLOW_YAW_K = 12.0;         // 朝向插值增益
+  var ROS_FOLLOW_TURN_RATE = 6.0;      // rad/s，车头最大角速度
+  var rosFollow = { active: false, idx: 0, done: false, frames: 0 };
+
+  function rosFollowStart() {
+    rosFollow.idx = 0;
+    rosFollow.done = false;
+    rosFollow.frames = 0;
+    rosFollow.active = currentPathPoints.length >= 2;
+    if (rosFollow.active) {
+      updateHud(0, true);
+      console.log('[follow] 开始跟踪 ' + currentPathPoints.length + ' 个路径点');
+    }
+  }
+
+  function rosFollowStep(dt) {
+    if (!rosFollow.active || currentPathPoints.length < 2 || dt <= 0) { return; }
+    if (state.estop) { return; }
+    if (readInput().mag > MANUAL_EPS) {
+      rosFollow.active = false;
+      console.log('[follow] 检测到手动输入，停止跟踪');
+      return;
+    }
+    var n = currentPathPoints.length, idx = rosFollow.idx;
+    var tx, ty, dx, dy, d;
+    // 前进索引：跳过已到达的点与重复点（RRT* 收尾可能出现重合点）
+    while (true) {
+      tx = currentPathPoints[idx].x;
+      ty = currentPathPoints[idx].y;
+      dx = tx - state.x; dy = ty - state.y;
+      d = Math.hypot(dx, dy);
+      if (d > ROS_FOLLOW_EPS || idx >= n - 1) { break; }
+      idx++;
+    }
+    rosFollow.idx = idx;
+    // 已站在最后一点 -> 结束（必须在“d 太小就返回”之前，否则重复点会卡死）
+    if (idx >= n - 1 && d <= ROS_FOLLOW_EPS) {
+      state.x = currentPathPoints[n - 1].x;
+      state.y = currentPathPoints[n - 1].y;
+      state.vx = 0; state.vyaw = 0;
+      rosFollow.active = false;
+      rosFollow.done = true;
+      console.log('[follow] 到达终点，跟踪结束（共 ' + rosFollow.frames + ' 帧）');
+      return;
+    }
+    if (d < 1e-9) { return; }
+
+    var stepLen = Math.min(ROS_FOLLOW_SPEED * dt, d);
+    var ux = dx / d, uy = dy / d, prevYaw = state.yaw;
+    state.x += ux * stepLen;
+    state.y += uy * stepLen;
+
+    var targetYaw = Math.atan2(uy, ux);
+    var dyaw = wrapPi(targetYaw - state.yaw) * Math.min(1, ROS_FOLLOW_YAW_K * dt);
+    var maxTurn = ROS_FOLLOW_TURN_RATE * dt;
+    if (dyaw > maxTurn) { dyaw = maxTurn; } else if (dyaw < -maxTurn) { dyaw = -maxTurn; }
+    state.yaw = wrapPi(state.yaw + dyaw);
+
+    state.vx = stepLen / dt;
+    state.vyaw = Math.max(-8, Math.min(8, wrapPi(state.yaw - prevYaw) / dt));
+    state.mode = 'auto';
+    rosFollow.frames++;
+  }
+
+  /* ==================================================================
+     1E. 交互目标 + 地图同步（阶段五新增）
+     点击 2D 地图 -> 发布 geometry_msgs/PoseStamped 到 /goal_pose；
+     后端 path_publisher.py 收到后更新 self.goal、重新规划并发布新 /path。
+     ================================================================== */
+  var GOAL_TOPIC = '/goal_pose';
+  var ROS_HIDE_FAKE_OBSTACLES = true;   // true = ROS 模式下隐藏前端随机障碍
+  var rosGoal = { topic: null, sent: 0, pending: null, fail: null };
+
+  // 画布(场地)坐标 -> ROS 地图坐标：显式"缩放 + 偏移"
+  //   sx = 50 / 18 = 2.7778    sy = 30 / 11.5 = 2.6087   （每轴独立满量程）
+  //   rx = 0 + (wx + 9)    * sx     场地左边界 -9 -> 0，右边界 +9 -> 50
+  //   ry = 0 + (5.75 - wy) * sy     场地下边界 +5.75 -> 0，上边界 -5.75 -> 30
+  function rosFromWorld(wx, wy) {
+    var sx = (ROS_MAP.xmax - ROS_MAP.xmin) / (ARENA_HX * 2);
+    var sy = (ROS_MAP.ymax - ROS_MAP.ymin) / (ARENA_HY * 2);
+    var rx = ROS_MAP.xmin + (wx + ARENA_HX) * sx;
+    var ry = ROS_MAP.ymin + (ARENA_HY - wy) * sy;
+    return {
+      x: Math.max(ROS_MAP.xmin, Math.min(ROS_MAP.xmax, rx)),
+      y: Math.max(ROS_MAP.ymin, Math.min(ROS_MAP.ymax, ry))
+    };
+  }
+
+  // 发布目标点，frame_id = map
+  function rosPublishGoal(wx, wy) {
+    if (!rosGoal.topic) {
+      console.warn('[goal] rosbridge 未连接或发布器未就绪，目标点未发送');
+      return false;
+    }
+    var g = rosFromWorld(wx, wy);
+    rosGoal.topic.publish(new ROSLIB.Message({
+      header: { frame_id: 'map' },
+      pose: {
+        position: { x: g.x, y: g.y, z: 0.0 },
+        orientation: { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }
+      }
+    }));
+    rosGoal.sent++;
+    console.log('[goal] -> ' + GOAL_TOPIC + ' map(' + g.x.toFixed(2) + ', ' +
+                g.y.toFixed(2) + ')  第 ' + rosGoal.sent + ' 次');
+    return true;
+  }
+
+  // ROS 模式下清掉前端自造的随机障碍（避免与后端地图穿模）
+  function rosHideFakeObstacles() {
+    if (!ROS_HIDE_FAKE_OBSTACLES) { return; }
+    state.obstacles = [];
+    state.dyn.active = false;
+    state.research.encounters = 0;
+    state.research.minClearance = Infinity;
+    state.research.dynMinClearance = Infinity;
+    state.collision = false;
+    state.blocked = false;
+    updateHud(0, true);
+    console.log('[map] 已隐藏前端伪障碍（state.obstacles = []）');
+  }
+
+  /* ==================================================================
+     1F. 真实障碍 + 起点上报（阶段六新增）
+     后端 /real_obstacles 发 visualization_msgs/MarkerArray：
+       CUBE(1)     -> 矩形障碍（pose=中心, scale.x/y=宽高）
+       CYLINDER(3) -> 圆形障碍（pose=圆心, scale.x=直径）
+     尺寸按每轴比例换算；矩形直接交给页面自带渲染器（含成本膨胀带），
+     圆单独用 ellipse 画。
+     ================================================================== */
+  var OBSTACLE_TOPIC = '/real_obstacles';
+  var ROBOT_POSE_TOPIC = '/robot_pose';
+  var rosObstacleTopic = null;
+  var rosRobotPose = null;
+  var rosRects = [], rosCircles = [];                     // [{x0,y0,x1,y1}] / [{cx,cy,rx,ry}]
+  var ROS_AXIS_X = (ARENA_HX * 2) / (ROS_MAP.xmax - ROS_MAP.xmin);   // 18/50 = 0.36
+  var ROS_AXIS_Y = (ARENA_HY * 2) / (ROS_MAP.ymax - ROS_MAP.ymin);   // 11.5/30 = 0.3833
+
+  function rosOnObstacles(msg) {
+    if (!msg || !msg.markers || !msg.markers.length) {
+      console.warn('[map] /real_obstacles 收到空 MarkerArray');
+      return;
+    }
+    var rects = [], circles = [], types = [], i, mk, s, w, k;
+    for (i = 0; i < msg.markers.length; i++) {
+      mk = msg.markers[i];
+      if (!mk || !mk.pose || !mk.pose.position) { continue; }
+      if (+mk.action === 2) { continue; }                 // DELETE
+      k = +mk.type;                                       // 数字/字符串都吃
+      types.push(k);
+      s = mk.scale || { x: 0, y: 0 };
+      w = rosToWorld(+mk.pose.position.x, +mk.pose.position.y);
+      if (k === 3) {                                      // CYLINDER -> 圆
+        circles.push({ cx: w.x, cy: w.y,
+                       rx: Math.abs(+s.x) * 0.5 * ROS_AXIS_X,
+                       ry: Math.abs(+s.x) * 0.5 * ROS_AXIS_Y });
+      } else if (k === 1) {                               // CUBE -> 矩形
+        var hw = Math.abs(+s.x) * 0.5 * ROS_AXIS_X;
+        var hh = Math.abs(+s.y) * 0.5 * ROS_AXIS_Y;
+        rects.push({ x0: w.x - hw, y0: w.y - hh, x1: w.x + hw, y1: w.y + hh });
+      }
+    }
+    rosRects = rects;
+    rosCircles = circles;
+    state.obstacles = rects;        // 交给页面原有 drawObstacles / HUD 净空
+    console.log('[map] 真实障碍 ' + rects.length + ' 矩形 + ' + circles.length +
+                ' 圆 | types=[' + types.join(',') + ']' +
+                (rects.length ? ' | 矩形1 x=' + rects[0].x0.toFixed(2) +
+                 '..' + rects[0].x1.toFixed(2) : ''));
+  }
+
+  // 圆障碍 + 矩形兜底绘制（render 里已有调用点，不用改别处）
+  function drawRealCircles() {
+    if (!ctx) { return; }
+    var i, r, c, x, y, w2, h2, gap, near;
+    for (i = 0; i < rosCircles.length; i++) {
+      c = rosCircles[i];
+      gap = Math.hypot(c.cx - state.x, c.cy - state.y) - Math.min(c.rx, c.ry);
+      near = gap < COLLIDE_R;
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(w2sX(c.cx), w2sY(c.cy),
+                  Math.max(1, c.rx * view.s), Math.max(1, c.ry * view.s),
+                  0, 0, TAU);
+      ctx.fillStyle = canvasRGBA(CANVAS_COLORS.text, .15);
+      ctx.strokeStyle = canvasRGBA(near ? CANVAS_COLORS.danger : CANVAS_COLORS.text,
+                                   near ? .9 : .6);
+      ctx.lineWidth = near ? 2 : 1.2;
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    // 兜底：若 state.obstacles 被隐藏逻辑清空，直接按角点画矩形
+    if (rosRects.length && state.obstacles.length === 0) {
+      for (i = 0; i < rosRects.length; i++) {
+        r = rosRects[i];
+        x = w2sX(r.x0); y = w2sY(r.y0);
+        w2 = (r.x1 - r.x0) * view.s; h2 = (r.y1 - r.y0) * view.s;
+        ctx.save();
+        ctx.fillStyle = canvasRGBA(CANVAS_COLORS.danger, .18);
+        ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.danger, .85);
+        ctx.lineWidth = 1.6;
+        ctx.fillRect(x, y, w2, h2);
+        ctx.strokeRect(x, y, w2, h2);
+        ctx.restore();
+      }
+    }
+  }
+
+  // 上报小车当前位置（起点同步）—— 读的是 state.x / state.y 实时值
+  var _rosPoseLog = { t: -1e9, x: 1e9, y: 1e9 };
+
+  function rosPublishRobotPose(quiet) {
+    if (!rosRobotPose) { return false; }
+    var wx = state.x, wy = state.y;
+    if (!isFinite(wx) || !isFinite(wy)) { return false; }
+    var g = rosFromWorld(wx, wy);
+    var yaw = -state.yaw;                        // 前端 +y 朝下 -> ROS +y 朝上
+    rosRobotPose.publish(new ROSLIB.Message({
+      header: { frame_id: 'map' },
+      pose: {
+        position: { x: g.x, y: g.y, z: 0.0 },
+        orientation: { x: 0.0, y: 0.0,
+                       z: Math.sin(yaw * 0.5), w: Math.cos(yaw * 0.5) }
+      }
+    }));
+    var now = performance.now();
+    if (!quiet || Math.hypot(wx - _rosPoseLog.x, wy - _rosPoseLog.y) > 0.25
+        || now - _rosPoseLog.t > 2000) {
+      _rosPoseLog = { t: now, x: wx, y: wy };
+      console.log('[pose] 场地(' + wx.toFixed(2) + ', ' + wy.toFixed(2) +
+                  ') -> map(' + g.x.toFixed(2) + ', ' + g.y.toFixed(2) + ')');
+    }
+    return true;
+  }
+
+  // 2 Hz 持续上报：后端随时持有最新起点（点击时还会再发一次）
+  window.setInterval(function () { if (rosRobotPose) { rosPublishRobotPose(true); } }, 500);
+
+  /* ==================================================================
+     1G. 目标校验 + 失败反馈
+     越界/落在障碍内 -> 画红叉 + 告警，不再静默失败；
+     每次合法点击先上报小车当前实际位置，再发目标。
+     ================================================================== */
+  // 目标点（ROS 坐标）是否落在膨胀障碍内 —— 与后端 world.point_free 同判据
+  function rosPointBlocked(gx, gy) {
+    var w = rosToWorld(gx, gy), i, r, c, dx, dy;
+    for (i = 0; i < rosRects.length; i++) {
+      r = rosRects[i];
+      if (w.x >= r.x0 && w.x <= r.x1 && w.y >= r.y0 && w.y <= r.y1) { return true; }
+    }
+    for (i = 0; i < rosCircles.length; i++) {
+      c = rosCircles[i];
+      if (c.rx <= 0 || c.ry <= 0) { continue; }
+      dx = (w.x - c.cx) / c.rx;
+      dy = (w.y - c.cy) / c.ry;
+      if (dx * dx + dy * dy <= 1.0) { return true; }
+    }
+    return false;
+  }
+
+
+  // 记录一次被拒/失败的目标（画红叉用）
+  function rosGoalFail(wx, wy, why) {
+    var g = rosFromWorld(wx, wy);
+    rosGoal.fail = { wx: wx, wy: wy, rx: g.x, ry: g.y, why: why };
+    rosGoal.pending = null;
+    log('log_target', { x: wx.toFixed(1), y: wy.toFixed(1) }, 'danger');
+    console.warn('[goal] 目标被拒（' + why + '）：场地(' + wx.toFixed(2) + ', ' +
+                 wy.toFixed(2) + ') -> map(' + g.x.toFixed(2) + ', ' + g.y.toFixed(2) + ')');
+    updateHud(0, true);
+  }
+
+  // 红叉：画在最近一次失败的目标点上
+  function drawGoalFail() {
+    var f = rosGoal.fail;
+    if (!f || !ctx) { return; }
+    var x = w2sX(f.wx), y = w2sY(f.wy), r = 9;
+    ctx.save();
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.danger, .95);
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
+    ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, r + 5, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 3 s 内没收到新路径 -> 判定后端规划失败
+  function rosGoalTick(now) {
+    var p = rosGoal.pending;
+    if (!p || now - p.t < 3000) { return; }
+    rosGoalFail(p.wx, p.wy, '后端未在 3 s 内返回新路径');
+  }
+
+  // 连接 + 订阅（ROSLIB 由 <head> 里的 CDN 提供）
+
+  // 连接 + 订阅（ROSLIB 由 <head> 里的 CDN 提供）
+  function rosConnect() {
+    if (typeof ROSLIB === 'undefined') {
+      console.warn('[rosbridge] roslibjs 未加载：跳过实时路径订阅（本地模拟不受影响）');
+      return;
+    }
+    var ros = new ROSLIB.Ros({ url: ROS_WS_URL });
+    ros.on('connection', function () {
+      rosOverlay.connected = true;
+      console.log('[rosbridge] 已连接 ' + ROS_WS_URL);
+      rosHideFakeObstacles();          // 阶段五：后端算路 -> 前端不再画随机障碍
+    });
+    ros.on('error', function (e) { console.warn('[rosbridge] 连接错误', e); });
+    ros.on('close', function () {
+      rosOverlay.connected = false;
+      rosGoal.topic = null;            // 阶段五：断线后点击回退到本地导航
+      rosObstacleTopic = null;         // 阶段六
+      rosRobotPose = null;             // 阶段六
+      console.warn('[rosbridge] 连接关闭，3s 后重连');
+      window.setTimeout(rosConnect, 3000);
+    });
+    var topic = new ROSLIB.Topic({
+      ros: ros, name: '/path', messageType: 'nav_msgs/Path',
+      throttle_rate: 0, queue_length: 1
+    });
+    topic.subscribe(rosOnPath);
+    console.log('[rosbridge] 正在订阅 /path (nav_msgs/Path)');
+
+    // 阶段五：目标点发布器（点击 2D 地图 -> /goal_pose -> 后端重规划）
+    rosGoal.topic = new ROSLIB.Topic({
+      ros: ros, name: GOAL_TOPIC, messageType: 'geometry_msgs/PoseStamped'
+    });
+    console.log('[rosbridge] 目标发布器就绪：' + GOAL_TOPIC);
+
+    // 阶段六：真实障碍订阅 + 起点上报发布器
+    rosObstacleTopic = new ROSLIB.Topic({
+      ros: ros, name: OBSTACLE_TOPIC, messageType: 'visualization_msgs/MarkerArray',
+      throttle_rate: 0, queue_length: 1
+    });
+    rosObstacleTopic.subscribe(rosOnObstacles);
+    rosRobotPose = new ROSLIB.Topic({
+      ros: ros, name: ROBOT_POSE_TOPIC, messageType: 'geometry_msgs/PoseStamped'
+    });
+    console.log('[rosbridge] 障碍订阅 ' + OBSTACLE_TOPIC +
+                ' / 起点上报 ' + ROBOT_POSE_TOPIC);
+  }
+  window.setTimeout(rosConnect, 0);   // 等 init() 把画布准备好再连
 
   /* ------------------------------------------------------------------
      2. SMALL HELPERS
@@ -1971,8 +2428,10 @@ function canvasRGBA(hex, a) {
       if (d < best) { best = d; }
     }
     // research: the moving entity is a first-class obstacle for the drive stack
-    var dd = rectDistance(dynRect(), px, py);
-    if (dd < best) { best = dd; }
+    if (state.dyn.active) {                   // 阶段五：隐藏时不再参与净空计算
+      var dd = rectDistance(dynRect(), px, py);
+      if (dd < best) { best = dd; }
+    }
     return best;
   }
 
@@ -2317,8 +2776,10 @@ function canvasRGBA(hex, a) {
     state.pid.integral = 0;
     state.pid.lastError = 0;
     resetOscilloscope();
-    // Batch 2: build the 1-2 waypoint detour for this target
-    state.path.points = planPath(state.x, state.y, p.x, p.y);
+    // Batch 2: 本地绕行规划器（伪数据）—— 阶段三起默认不再伪造绕行点
+    state.path.points = ROS_DROP_FAKE_PLANNER
+      ? [{ x: p.x, y: p.y }]                    // 只留目标点，导航/到达判定照常工作
+      : planPath(state.x, state.y, p.x, p.y);   // 旧行为，改 ROS_DROP_FAKE_PLANNER=false 即回滚
     state.path.index = 0;
     log('log_target', { x: p.x.toFixed(2), y: p.y.toFixed(2) });
     if (state.path.points.length > 1) {
@@ -3420,11 +3881,14 @@ function canvasRGBA(hex, a) {
     if (state.showGrid) { drawGrid(); }
     drawArena();
     drawObstacles();
-    drawDynamicObstacle();
+    drawRealCircles();   // 阶段六：后端真实圆形障碍
+    if (state.dyn.active) { drawDynamicObstacle(); }   // 阶段五：隐藏时不再绘制
     if (state.showTrail) { drawTrail(); }
     if (state.showLidar) { drawLidar(cx, cy); }
     if (state.showCam) { drawCameraFOV(cx, cy); }
     if (state.nav.active) { drawPath(cx, cy); drawTarget(cx, cy, now); }
+    drawRosPath();   // 阶段三：真实 RRT* 路径（rosbridge /path）
+    drawGoalFail();  // 阶段七：失败目标画红叉
     if (state.mission.name === 'CLEARING') { drawClearTarget(); }
     drawRobot(cx, cy, now);
     drawOscilloscope();
@@ -3774,6 +4238,11 @@ function canvasRGBA(hex, a) {
   }
 
   function regenerateMap(logIt) {
+    // 阶段五：ROS 模式下不再生成随机障碍（否则又会与后端地图穿模）
+    if (ROS_HIDE_FAKE_OBSTACLES && rosOverlay.connected) {
+      console.log('[map] ROS 模式：跳过随机障碍生成');
+      return;
+    }
     state.obstacles = generateObstacles();
     state.collision = false; state.blocked = false; state.flash = 0; state.wasInCollision = false;
     state.nav.active = false;
@@ -3973,6 +4442,8 @@ function canvasRGBA(hex, a) {
     lastFrame = now;
 
     update(dt);
+    rosFollowStep(dt);   // 阶段四：沿 /path 做路径跟踪（物理更新之后、渲染之前）
+    rosGoalTick(now);    // 阶段七：3 s 无新路径 -> 判失败画红叉
     render(now / 1000);
     drawTelemetry();
     updateHud(dt, false);
@@ -4015,7 +4486,37 @@ function canvasRGBA(hex, a) {
       if (e.button !== 0 && e.pointerType === 'mouse') { return; }
       if (state.estop) { logLocked(); return; }
       var r = dom.canvas.getBoundingClientRect();
-      setTarget(s2wX(e.clientX - r.left), s2wY(e.clientY - r.top));
+      var wx = s2wX(e.clientX - r.left), wy = s2wY(e.clientY - r.top);
+      if (rosGoal.topic) {
+        // 先换算 -> 判越界 -> 判障碍 -> 上报当前位置 -> 发目标
+        state.nav.active = false;
+        state.nav.blocked = 0;
+        // 注意：rosFromWorld 内部已 clamp，越界判断必须用未截断值
+        var rx = ROS_MAP.xmin + (wx + ARENA_HX) *
+                 ((ROS_MAP.xmax - ROS_MAP.xmin) / (ARENA_HX * 2));
+        var ry = ROS_MAP.ymin + (ARENA_HY - wy) *
+                 ((ROS_MAP.ymax - ROS_MAP.ymin) / (ARENA_HY * 2));
+        var out = (rx < ROS_MAP.xmin || rx > ROS_MAP.xmax ||
+                   ry < ROS_MAP.ymin || ry > ROS_MAP.ymax);
+        var gx = clamp(rx, ROS_MAP.xmin, ROS_MAP.xmax);
+        var gy = clamp(ry, ROS_MAP.ymin, ROS_MAP.ymax);
+        if (out) { rosGoalFail(wx, wy, '超出 50x30 地图边界'); return; }
+        if (rosPointBlocked(gx, gy)) {
+          rosGoalFail(wx, wy, '目标点落在障碍物内');
+          return;
+        }
+        rosPublishRobotPose();                  // 上报小车当前实际位置
+        rosGoal.fail = null;
+        rosGoal.pending = { wx: wx, wy: wy, x: gx, y: gy, t: performance.now() };
+        clearPath();
+        rosPublishGoal(wx, wy);
+        state.nav.x = wx;
+        state.nav.y = wy;
+        log('log_target', { x: wx.toFixed(2), y: wy.toFixed(2) });
+        updateHud(0, true);
+      } else {
+        setTarget(wx, wy);          // 离线回退：保持原有本地导航行为
+      }
     });
 
     // ---- actions ----
@@ -4998,3 +5499,469 @@ function canvasRGBA(hex, a) {
     openBtn  = document.getElementById('algoOpen');
     closeBtn = document.getElementById('algoClose');
     statusEl = document.getElementById('algoStatus');
+    termEl   = document.getElementById('algoTerm');
+
+    // benchmark panel refs (all optional: the modal works without them)
+    compareEl   = document.getElementById('algoCompare');
+    startEl     = document.getElementById('algoStart');
+    exportEl    = document.getElementById('algoExport');
+    masNodesEl  = document.getElementById('algoMAstNodes');
+    masLenEl    = document.getElementById('algoMAstLen');
+    masMsEl     = document.getElementById('algoMAstMs');
+    masRevEl    = document.getElementById('algoMAstRev');
+    mdijNodesEl = document.getElementById('algoMDijNodes');
+    mdijLenEl   = document.getElementById('algoMDijLen');
+    mdijMsEl    = document.getElementById('algoMDijMs');
+    mdijRevEl   = document.getElementById('algoMDijRev');
+    mEffEl      = document.getElementById('algoMEff');
+    thDijEl     = document.getElementById('algoThDij');
+
+    if (!modal || !canvas || !openBtn || !closeBtn) { return; }
+    ctx = canvas.getContext('2d');
+    if (!ctx) { return; }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+
+    if (compareEl) {
+      compareEl.checked = bench.dijkstra;
+      compareEl.addEventListener('change', function () {
+        bench.dijkstra = !!this.checked;
+        termLine(bench.dijkstra
+          ? '> [BENCH] Compare Dijkstra armed — press Start to run the pair.'
+          : '> [BENCH] Dijkstra comparison off.', 'dim');
+      });
+    }
+    if (startEl) {
+      startEl.addEventListener('click', function () {
+        rerun('> [BENCH] Start — re-running on the current grid...');
+      });
+    }
+    if (exportEl) { exportEl.addEventListener('click', exportCsv); }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modal.classList.contains('open')) { closeModal(); }
+    });
+    window.addEventListener('resize', function () {
+      if (modal.classList.contains('open')) { fit(); }
+    });
+
+    // listen on the main map: the host's own handler runs first (it was
+    // registered earlier), so the shared target is already up to date here
+    var map = document.getElementById('map');
+    if (map && !mapBound) {
+      mapBound = true;
+      map.addEventListener('pointerdown', onMapPointerDown);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ready);
+  } else {
+    ready();
+  }
+})();
+</script>
+<script>
+/* =====================================================================
+   ADVANCED CONTROL & PERCEPTION — isolated research module
+   ---------------------------------------------------------------------
+   SAFETY CONTRACT
+     * Never writes state.x / state.y / state.yaw (main physics stays
+       untouched). It only READS the live pose through window.__teleop.
+     * Everything it owns lives in the private `S` object below.
+     * The PID gains it edits are the dedicated control namespace
+       `state.pid` — the same isolated object navCommand() consumes, so
+       the control layer has exactly one source of truth.
+     * Renders into its OWN canvases plus a pointer-events:none overlay,
+       so the main renderer is never disturbed.
+
+   LAYERS
+     control    : discrete PID (already inside navCommand) + tuning panel
+     perception : gaussian measurement noise + complementary filter
+     viz        : #pidCanvas, #filterCanvas, #perceptionOverlay
+   ===================================================================== */
+(function () {
+  'use strict';
+
+  var ARENA_HX = 9.0, ARENA_HY = 5.75, PAD = 0.7;
+  var TEL_N = 100;                 // rolling window: last 100 samples
+  var TEL_DT = 0.1;                // 10 Hz sampling
+
+  /* ---- isolated perception state (no collision with the state machine) ---- */
+  var S = {
+    sigma: 0.15,                   // measurement noise sigma (m), slider 0..1
+    alpha: 0.80,                   // complementary filter weight, slider 0.5..1
+    estX: 0, measX: 0, ready: false,
+    lastT: 0, timer: 0,
+    vel: [], eMeas: [], eEst: []   // rolling windows
+  };
+
+  var PRESETS = [
+    { label: 'preset: default (Kp1.5 Ki0.1 Kd0.2)', kp: 1.50, ki: 0.10, kd: 0.20 },
+    { label: 'preset: extreme overshoot',           kp: 2.80, ki: 0.60, kd: 0.00 },
+    { label: 'preset: overdamped',                  kp: 0.80, ki: 0.02, kd: 0.90 }
+  ];
+  var presetIdx = 0;
+
+  var el = {};
+  var ovCtx = null, pidCtx = null, filtCtx = null;
+
+  /* ---- host bridge (read-only) ---- */
+  function hostState() {
+    var T = window.__teleop;
+    return (T && T.state) ? T.state : null;
+  }
+
+  function gauss() {
+    var u = 0, v = 0;
+    while (u === 0) { u = Math.random(); }
+    while (v === 0) { v = Math.random(); }
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+
+  /* ==================================================================
+     SAMPLE — noise model + complementary filter
+       measuredX = truthX + gaussian() * noiseLevel
+       estX      = alpha * (estX + v*dt) + (1 - alpha) * measuredX
+     ================================================================== */
+  function sample() {
+    var st = hostState();
+    if (!st) { return; }
+
+    var now = performance.now();
+    var dt = S.lastT ? Math.min((now - S.lastT) / 1000, 0.1) : 0.016;
+    S.lastT = now;
+
+    var truthX = (typeof st.x === 'number') ? st.x : 0;
+    var v      = (typeof st.vx === 'number') ? st.vx : 0;
+
+    if (!S.ready) { S.estX = truthX; S.measX = truthX; S.ready = true; }
+
+    // --- measurement (noisy sensor) ---
+    S.measX = truthX + gauss() * S.sigma;
+
+    // --- complementary filter: model prediction corrected by the measurement ---
+    var predicted = S.estX + v * dt;
+    S.estX = S.alpha * predicted + (1 - S.alpha) * S.measX;
+
+    // --- 10 Hz rolling windows ---
+    S.timer += dt;
+    if (S.timer < TEL_DT) { return; }
+    S.timer = 0;
+    S.vel.push(v);
+    S.eMeas.push(Math.abs(S.measX - truthX));
+    S.eEst.push(Math.abs(S.estX - truthX));
+    while (S.vel.length > TEL_N) { S.vel.shift(); S.eMeas.shift(); S.eEst.shift(); }
+  }
+
+  /* ==================================================================
+     PLOT HELPERS
+     ================================================================== */
+  function prep(cv, ctx) {
+    var r = cv.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(60, Math.round(r.width));
+    var h = Math.max(30, Math.round(r.height));
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: w, h: h };
+  }
+
+  function grid(ctx, w, h, zeroLine) {
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .9);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(3.5, 3.5, w - 7, h - 7);
+    ctx.beginPath();
+    for (var i = 1; i < 4; i++) {
+      var gy = Math.round(4 + (h - 8) * i / 4) + 0.5;
+      ctx.moveTo(4, gy); ctx.lineTo(w - 4, gy);
+    }
+    ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.line, .5);
+    ctx.stroke();
+    if (zeroLine) {
+      ctx.beginPath();
+      ctx.moveTo(4, zeroLine + 0.5); ctx.lineTo(w - 4, zeroLine + 0.5);
+      ctx.strokeStyle = canvasRGBA(CANVAS_COLORS.text, .45);
+      ctx.stroke();
+    }
+  }
+
+  function caption(ctx, h, w, left, right, color) {
+    ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = color;
+    ctx.fillText(left, 7, h - 5);
+    ctx.fillStyle = canvasRGBA(CANVAS_COLORS.text, .8);
+    ctx.fillText(right, Math.max(7, w - 74), h - 5);
+  }
+
+  /* ==================================================================
+     CONTROL LAYER PLOT — signed linear velocity, 100 samples
+     ================================================================== */
+  function drawPid() {
+    if (!pidCtx || !el.pidCanvas) { return; }
+    var d = prep(el.pidCanvas, pidCtx), w = d.w, h = d.h, i;
+    var arr = S.vel;
+
+    pidCtx.clearRect(0, 0, w, h);
+
+    var scale = 0.5;
+    for (i = 0; i < arr.length; i++) { scale = Math.max(scale, Math.abs(arr[i])); }
+    var mid = (h - 14) / 2 + 4;
+    var half = (h - 22) / 2;
+
+    grid(pidCtx, w, h, mid);
+
+    var n = arr.length;
+    if (n >= 2) {
+      var stepX = (w - 8) / (TEL_N - 1);
+      pidCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.accent, .95);
+      pidCtx.lineWidth = 1.5;
+      pidCtx.beginPath();
+      for (i = 0; i < n; i++) {
+        var px = w - 4 - (n - 1 - i) * stepX;
+        var py = mid - clamp(arr[i] / scale, -1, 1) * half;
+        if (i === 0) { pidCtx.moveTo(px, py); } else { pidCtx.lineTo(px, py); }
+      }
+      pidCtx.stroke();
+    }
+
+    var cur = n ? arr[n - 1] : 0;
+    caption(pidCtx, h, w, 'v ' + cur.toFixed(2) + ' m/s', 'max ' + scale.toFixed(2),
+            canvasRGBA(CANVAS_COLORS.accent, .95));
+  }
+
+  /* ==================================================================
+     PERCEPTION LAYER PLOT — |measured error| vs |filtered error|
+     ================================================================== */
+  function drawFilter() {
+    if (!filtCtx || !el.filterCanvas) { return; }
+    var d = prep(el.filterCanvas, filtCtx), w = d.w, h = d.h, i;
+    var m = S.eMeas, f = S.eEst;
+
+    filtCtx.clearRect(0, 0, w, h);
+
+    var scale = 0.05;
+    for (i = 0; i < m.length; i++) {
+      if (m[i] > scale) { scale = m[i]; }
+      if (f[i] > scale) { scale = f[i]; }
+    }
+    grid(filtCtx, w, h, 0);
+
+    function trace(arr, color) {
+      var n = arr.length;
+      if (n < 2) { return; }
+      var stepX = (w - 8) / (TEL_N - 1);
+      filtCtx.strokeStyle = color;
+      filtCtx.lineWidth = 1.5;
+      filtCtx.beginPath();
+      for (var k = 0; k < n; k++) {
+        var px = w - 4 - (n - 1 - k) * stepX;
+        var py = (h - 14) - (Math.min(arr[k], scale) / scale) * (h - 24);
+        if (k === 0) { filtCtx.moveTo(px, py); } else { filtCtx.lineTo(px, py); }
+      }
+      filtCtx.stroke();
+    }
+    trace(m, canvasRGBA(CANVAS_COLORS.warn, .95));   // measured (yellow)
+    trace(f, canvasRGBA(CANVAS_COLORS.success, .95));   // filtered (green)
+
+    var curM = m.length ? m[m.length - 1] : 0;
+    var curF = f.length ? f[f.length - 1] : 0;
+    caption(filtCtx, h, w, 'meas ' + curM.toFixed(2) + ' · filt ' + curF.toFixed(2) + ' m',
+            'max ' + scale.toFixed(2), canvasRGBA(CANVAS_COLORS.warn, .95));
+
+    // running means are the actual research result: filtering must lower them
+    if (el.filterReadout && m.length > 2) {
+      var sm = 0, sf = 0;
+      for (i = 0; i < m.length; i++) { sm += m[i]; sf += f[i]; }
+      sm /= m.length; sf /= f.length;
+      var txt = '|err| meas ' + sm.toFixed(3) + ' m · filt ' + sf.toFixed(3) + ' m';
+      if (txt !== S.lastReadout) { S.lastReadout = txt; el.filterReadout.textContent = txt; }
+    }
+  }
+
+  /* ==================================================================
+     MAP OVERLAY — Red truth · Yellow measured · Green filtered
+     The transform mirrors the host view exactly (same padding + fit),
+     so the markers land on the robot without touching the main renderer.
+     ================================================================== */
+  function drawOverlay() {
+    if (!ovCtx || !el.overlay) { return; }
+    var st = hostState();
+    var d = prep(el.overlay, ovCtx), w = d.w, h = d.h;
+    ovCtx.clearRect(0, 0, w, h);
+    if (!st) { return; }
+
+    var s = Math.max(4, Math.min(w / ((ARENA_HX + PAD) * 2), h / ((ARENA_HY + PAD) * 2)));
+    var cx = w / 2, cy = h / 2;
+    var truthX = (typeof st.x === 'number') ? st.x : 0;
+    var truthY = (typeof st.y === 'number') ? st.y : 0;
+
+    var tx = cx + truthX * s, ty = cy + truthY * s;
+    var mx = cx + S.measX * s,  my = cy + truthY * s;
+    var ex = cx + S.estX * s,   ey = cy + truthY * s;
+
+    // measurement residual (truth -> measured)
+    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .55);
+    ovCtx.lineWidth = 1;
+    ovCtx.setLineDash([3, 4]);
+    ovCtx.beginPath();
+    ovCtx.moveTo(tx, ty); ovCtx.lineTo(mx, my);
+    ovCtx.stroke();
+    ovCtx.setLineDash([]);
+
+    // yellow: noisy measurement
+    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.warn, .95);
+    ovCtx.lineWidth = 1.6;
+    ovCtx.beginPath(); ovCtx.arc(mx, my, 6.5, 0, Math.PI * 2); ovCtx.stroke();
+
+    // green: complementary filter estimate
+    ovCtx.fillStyle = canvasRGBA(CANVAS_COLORS.success, .95);
+    ovCtx.beginPath(); ovCtx.arc(ex, ey, 3.4, 0, Math.PI * 2); ovCtx.fill();
+
+    // red: ground truth (always the true pose)
+    ovCtx.fillStyle = canvasRGBA(CANVAS_COLORS.danger, .95);
+    ovCtx.strokeStyle = canvasRGBA(CANVAS_COLORS.bg, .9);
+    ovCtx.lineWidth = 1.2;
+    ovCtx.beginPath(); ovCtx.arc(tx, ty, 4.6, 0, Math.PI * 2); ovCtx.fill(); ovCtx.stroke();
+  }
+
+  /* ==================================================================
+     UI — sliders, preset, and two-way mirror of the drawer controls
+     ================================================================== */
+  function pushPidToCanvasUi() {
+    var st = hostState();
+    if (!st || !st.pid) { return; }
+    var p = st.pid;
+
+    el.pidKp.value = String(p.kp);
+    el.pidKi.value = String(p.ki);
+    el.pidKd.value = String(p.kd);
+    el.pidVKp.textContent = p.kp.toFixed(2);
+    el.pidVKi.textContent = p.ki.toFixed(2);
+    el.pidVKd.textContent = p.kd.toFixed(2);
+
+    // keep the Parameters-drawer trio consistent (both edit the same namespace)
+    var dKp = document.getElementById('rKp'), vKp = document.getElementById('vKp');
+    var dKi = document.getElementById('rKi'), vKi = document.getElementById('vKi');
+    var dKd = document.getElementById('rKd'), vKd = document.getElementById('vKd');
+    if (dKp) { dKp.value = String(p.kp); }
+    if (dKi) { dKi.value = String(p.ki); }
+    if (dKd) { dKd.value = String(p.kd); }
+    if (vKp) { vKp.textContent = p.kp.toFixed(2); }
+    if (vKi) { vKi.textContent = p.ki.toFixed(2); }
+    if (vKd) { vKd.textContent = p.kd.toFixed(2); }
+  }
+
+  function applyPreset(idx) {
+    var st = hostState();
+    if (!st || !st.pid) { return; }
+    var pr = PRESETS[idx % PRESETS.length];
+    presetIdx = idx % PRESETS.length;
+    st.pid.kp = pr.kp; st.pid.ki = pr.ki; st.pid.kd = pr.kd;
+    st.pid.integral = 0; st.pid.lastError = 0;      // no stale wind-up after a tune
+    if (el.pidPreset) { el.pidPreset.textContent = pr.label; }
+    pushPidToCanvasUi();
+  }
+
+  function wire() {
+    el.overlay      = document.getElementById('perceptionOverlay');
+    el.pidCanvas    = document.getElementById('pidCanvas');
+    el.filterCanvas = document.getElementById('filterCanvas');
+    el.pidKp = document.getElementById('pidKp');
+    el.pidKi = document.getElementById('pidKi');
+    el.pidKd = document.getElementById('pidKd');
+    el.pidVKp = document.getElementById('pidVKp');
+    el.pidVKi = document.getElementById('pidVKi');
+    el.pidVKd = document.getElementById('pidVKd');
+    el.pidPreset = document.getElementById('pidPreset');
+    el.pidPresetBtn = document.getElementById('pidPresetBtn');
+    el.filtSigma = document.getElementById('filtSigma');
+    el.filtAlpha = document.getElementById('filtAlpha');
+    el.filtVSigma = document.getElementById('filtVSigma');
+    el.filtVAlpha = document.getElementById('filtVAlpha');
+    el.filterReadout = document.getElementById('filterReadout');
+
+    if (el.overlay) { ovCtx = el.overlay.getContext('2d'); }
+    if (el.pidCanvas) { pidCtx = el.pidCanvas.getContext('2d'); }
+    if (el.filterCanvas) { filtCtx = el.filterCanvas.getContext('2d'); }
+
+    function gainHandler(which) {
+      return function () {
+        var st = hostState();
+        if (!st || !st.pid) { return; }
+        if (which === 'kp') { st.pid.kp = clamp(parseFloat(this.value), 0, 3); st.pid.integral = 0; }
+        if (which === 'ki') { st.pid.ki = clamp(parseFloat(this.value), 0, 1); st.pid.integral = 0; }
+        if (which === 'kd') { st.pid.kd = clamp(parseFloat(this.value), 0, 1); st.pid.lastError = 0; }
+        if (el.pidPreset) { el.pidPreset.textContent = 'preset: custom'; }
+        pushPidToCanvasUi();
+      };
+    }
+    if (el.pidKp) { el.pidKp.addEventListener('input', gainHandler('kp')); }
+    if (el.pidKi) { el.pidKi.addEventListener('input', gainHandler('ki')); }
+    if (el.pidKd) { el.pidKd.addEventListener('input', gainHandler('kd')); }
+
+    if (el.pidPresetBtn) {
+      el.pidPresetBtn.addEventListener('click', function () {
+        applyPreset(presetIdx + 1);
+      });
+    }
+
+    if (el.filtSigma) {
+      el.filtSigma.addEventListener('input', function () {
+        S.sigma = clamp(parseFloat(this.value), 0, 1);
+        el.filtVSigma.textContent = S.sigma.toFixed(2) + ' m';
+      });
+    }
+    if (el.filtAlpha) {
+      el.filtAlpha.addEventListener('input', function () {
+        S.alpha = clamp(parseFloat(this.value), 0.5, 1);
+        el.filtVAlpha.textContent = S.alpha.toFixed(2);
+      });
+    }
+
+    el.filtVSigma.textContent = S.sigma.toFixed(2) + ' m';
+    el.filtVAlpha.textContent = S.alpha.toFixed(2);
+    applyPreset(0);          // seed the canonical PID namespace with the defaults
+  }
+
+  /* ==================================================================
+     LOOP — one rAF callback, fully guarded: a failure here can never
+     break the host page's own animation loop.
+     ================================================================== */
+  function frame() {
+    try {
+      sample();
+      drawPid();
+      drawFilter();
+      drawOverlay();
+    } catch (err) {
+      if (window.console) { window.console.warn('[research] frame failed', err); }
+    }
+    window.requestAnimationFrame(frame);
+  }
+
+  function boot() {
+    try {
+      wire();
+      window.requestAnimationFrame(frame);
+    } catch (err) {
+      if (window.console) { window.console.warn('[research] boot failed', err); }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+
+</body>
+</html>
